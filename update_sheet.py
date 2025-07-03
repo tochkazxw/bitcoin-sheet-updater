@@ -11,71 +11,56 @@ client = gspread.authorize(creds)
 spreadsheet_id = "1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU"
 sheet = client.open_by_key(spreadsheet_id).sheet1
 
-# Функции получения данных
-def get_coindesk_price():
-    try:
-        r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
-        r.raise_for_status()
-        return float(r.json()["bpi"]["USD"]["rate_float"])
-    except Exception as e:
-        print("Ошибка запроса к Coindesk:", e)
-        return None
-
-def get_coingecko_price():
-    try:
-        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        return float(data["bitcoin"]["usd"])
-    except Exception as e:
-        print("Ошибка запроса к CoinGecko:", e)
-        return None
-
-def get_difficulty_and_hashrate():
-    try:
-        diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
-        hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
-        diff_str = f"{diff:.2E}"         # пример: 1.24E+14
-        hashrate_str = f"{int(hashrate)}" # без EH/s, просто число
-        return diff_str, hashrate_str
-    except Exception as e:
-        print("Ошибка получения сложности и хешрейта:", e)
-        return "N/A", "N/A"
-
+# Получаем дату в часовом поясе Молдовы
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
-headers = ["Дата", "Средний курс BTC", "Сложность сети", "Хешрейт сети"]
+# Получаем курс BTC
+def get_coindesk_price():
+    try:
+        r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
+        return float(r.json()["bpi"]["USD"]["rate_float"])
+    except:
+        return None
 
-# Проверяем таблицу на пустоту, чтобы добавить заголовки
-rows = sheet.get_all_values()
-if len(rows) == 0:
-    sheet.append_row(headers)
-    print("Добавлены заголовки")
+def get_coingecko_price():
+    try:
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
+        return float(r.json()["bitcoin"]["usd"])
+    except:
+        return None
 
-# Получаем цены BTC
-prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
-if not prices:
-    print("Не удалось получить цены BTC ни с одного источника.")
-    btc_avg = "N/A"
-else:
-    btc_avg = round(sum(prices) / len(prices), 2)
+# Сложность и хешрейт
+def get_difficulty_and_hashrate():
+    try:
+        diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
+        hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
+        diff_str = f"{diff:.2E}"
+        hashrate_str = f"{int(hashrate)}"
+        return diff_str, hashrate_str
+    except:
+        return "N/A", "N/A"
 
-difficulty, hashrate = get_difficulty_and_hashrate()
+# Основные данные
 today = get_today_moldova()
+prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
+btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
+difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Добавляем новую строку с текущей датой и данными
-sheet.append_row([today, str(btc_avg), difficulty, hashrate])
-print("Добавлена новая строка с датой", today)
+# Добавляем заголовки + данные
+headers = ["Дата", "Средний курс BTC", "Сложность сети", "Хешрейт сети"]
+data_row = [today, str(btc_avg), difficulty, hashrate]
 
-# Добавляем рамки к всей таблице
+sheet.append_row(headers)
+sheet.append_row(data_row)
+print(f"✅ Добавлены заголовки и данные за {today}")
+
+# Обновляем рамки
 spreadsheet = client.open_by_key(spreadsheet_id)
 worksheet_id = sheet._properties['sheetId']
-
-all_values = sheet.get_all_values()
-row_count = len(all_values)
+row_count = len(sheet.get_all_values())
 col_count = len(headers)
 
 border_request = {
@@ -101,4 +86,4 @@ border_request = {
 }
 
 spreadsheet.batch_update(border_request)
-print("✅ Рамки добавлены ко всей таблице!")
+print("📊 Рамки применены ко всей таблице.")
