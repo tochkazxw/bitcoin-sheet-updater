@@ -22,13 +22,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install gspread oauth2client requests beautifulsoup4 pytz
+          pip install gspread oauth2client requests beautifulsoup4 pytz google-api-python-client
 
       - name: Write credentials.json
         run: |
-          printf '%s' "$GOOGLE_CREDENTIALS" > credentials.json
-        env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          printf '%s' "${{ secrets.GOOGLE_CREDENTIALS }}" > credentials.json
 
       - name: Run script
         run: python update_sheet.py
