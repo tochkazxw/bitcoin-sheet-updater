@@ -11,7 +11,7 @@ creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", sco
 client = gspread.authorize(creds)
 
 # Открытие таблицы
-spreadsheet_id = "1BUXPs17GrBNAXM0NSgfig3RlJAHNcJlMQ8GvHbK5GpU"
+spreadsheet_id = "1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU"
 sheet = client.open_by_key(spreadsheet_id).sheet1
 
 # Получение курса BTC с Binance
