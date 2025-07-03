@@ -2,8 +2,8 @@ name: Update Bitcoin Sheet
 
 on:
   schedule:
-    - cron: '0 6 * * *'   # 06:00 UTC (09:00 Молдова)
-    - cron: '0 15 * * *'  # 15:00 UTC (18:00 Молдова)
+    - cron: '0 6 * * *'   # 06:00 UTC (09:00 по Молдове)
+    - cron: '0 15 * * *'  # 15:00 UTC (18:00 по Молдове)
   workflow_dispatch:
 
 jobs:
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v3
 
       - name: Setup Python
@@ -25,8 +25,7 @@ jobs:
           pip install gspread oauth2client requests beautifulsoup4 pytz google-api-python-client
 
       - name: Write credentials.json
-        run: |
-          echo "${{ secrets.GOOGLE_CREDENTIALS }}" > credentials.json
+        run: echo "${{ secrets.GOOGLE_CREDENTIALS }}" > credentials.json
 
       - name: Run update script
         run: python update_sheet.py
