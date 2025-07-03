@@ -35,8 +35,8 @@ def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
         hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
-        diff_str = f"{diff:.2E}"
-        hashrate_str = f"{int(hashrate)}"
+        diff_str = f"{diff:.2E}"         # пример: 1.24E+14
+        hashrate_str = f"{int(hashrate)}" # без EH/s, просто число
         return diff_str, hashrate_str
     except Exception as e:
         print("Ошибка получения сложности и хешрейта:", e)
@@ -49,12 +49,13 @@ def get_today_moldova():
 
 headers = ["Дата", "Средний курс BTC", "Сложность сети", "Хешрейт сети"]
 
-# Проверяем, есть ли данные в таблице, если нет — добавляем заголовки
+# Проверяем таблицу на пустоту, чтобы добавить заголовки
 rows = sheet.get_all_values()
 if len(rows) == 0:
     sheet.append_row(headers)
     print("Добавлены заголовки")
 
+# Получаем цены BTC
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 if not prices:
     print("Не удалось получить цены BTC ни с одного источника.")
@@ -65,10 +66,11 @@ else:
 difficulty, hashrate = get_difficulty_and_hashrate()
 today = get_today_moldova()
 
+# Добавляем новую строку с текущей датой и данными
 sheet.append_row([today, str(btc_avg), difficulty, hashrate])
-print("✅ Таблица обновлена!")
+print("Добавлена новая строка с датой", today)
 
-# Добавляем рамки на всю таблицу
+# Добавляем рамки к всей таблице
 spreadsheet = client.open_by_key(spreadsheet_id)
 worksheet_id = sheet._properties['sheetId']
 
