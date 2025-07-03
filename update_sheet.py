@@ -1,85 +1,154 @@
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import requests
-from bs4 import BeautifulSoup
 import datetime
+import pytz
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
 import os
 
-def send_telegram_message(token, chat_id, text):
+# Авторизация gspread
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+client = gspread.authorize(creds)
+sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
+sheet_id = sheet._properties['sheetId']
+
+# Авторизация Google Sheets API
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+service = build("sheets", "v4", credentials=credentials)
+
+# Функция отправки сообщения в Telegram
+def send_telegram_message(text):
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        print("⚠️ Не заданы TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID в переменных окружения.")
+        return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": text,
-        "parse_mode": "Markdown"
+        "parse_mode": "HTML"
     }
     try:
-        resp = requests.post(url, data=payload)
-        resp.raise_for_status()
+        resp = requests.post(url, data=payload, timeout=10)
+        if resp.status_code == 200:
+            print("✅ Уведомление в Telegram отправлено.")
+        else:
+            print(f"❌ Ошибка отправки уведомления в Telegram: {resp.text}")
     except Exception as e:
-        print(f"Ошибка при отправке сообщения в Telegram: {e}")
+        print(f"❌ Исключение при отправке Telegram уведомления: {e}")
 
-# Авторизация в Google Sheets
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-client = gspread.authorize(creds)
+# Получить текущую дату
+def get_today_moldova():
+    tz = pytz.timezone('Europe/Chisinau')
+    now = datetime.datetime.now(tz)
+    return now.strftime("%d.%m.%Y")
 
-# Открытие таблицы
-spreadsheet_id = "1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU"
-sheet = client.open_by_key(spreadsheet_id).sheet1
-
-def get_binance():
-    try:
-        r = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT", timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        if "price" in data:
-            return float(data["price"])
-    except Exception as e:
-        print("Ошибка запроса к Binance:", e)
-    return None
-
-def get_coindesk():
+# Получение курса
+def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
-        r.raise_for_status()
         return float(r.json()["bpi"]["USD"]["rate_float"])
-    except Exception as e:
-        print("Ошибка запроса к Coindesk:", e)
-    return None
+    except:
+        return None
 
+def get_coingecko_price():
+    try:
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
+        return float(r.json()["bitcoin"]["usd"])
+    except:
+        return None
+
+# Сложность и хешрейт
 def get_difficulty_and_hashrate():
     try:
-        r = requests.get("https://bits.media/difficulty/bitcoin/", timeout=10)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-        rows = soup.find_all("div", class_="coininfo-line")
-        difficulty = hashrate = "N/A"
-        for row in rows:
-            text = row.get_text()
-            if "Сложность сети" in text:
-                difficulty = row.find_next("div").text.strip()
-            if "Хешрейт" in text:
-                hashrate = row.find_next("div").text.strip()
-        # Оставим цифры, уберём EH/s из хешрейта (если есть)
-        hashrate = ''.join(filter(lambda c: c.isdigit() or c == '.', hashrate))
-        return difficulty, hashrate
-    except Exception as e:
-        print("Ошибка получения сложности и хешрейта:", e)
-    return "N/A", "N/A"
+        diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
+        hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
+        return f"{diff:.2E}", str(int(hashrate))
+    except:
+        return "N/A", "N/A"
 
-btc_prices = [p for p in [get_binance(), get_coindesk()] if p is not None]
-btc_avg = round(sum(btc_prices) / len(btc_prices), 2) if btc_prices else "N/A"
+# Получить данные
+today = get_today_moldova()
+prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
+btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-today = datetime.date.today().strftime("%d.%m.%Y")
+# Добавить строки
+headers = ["Параметры сети", "Курс", "Сложность ", "Общий хешрейт сети, Th"]
+data_row = [today, str(btc_avg), difficulty, hashrate]
+sheet.append_row(headers)
+sheet.append_row(data_row)
 
-sheet.append_row([today, btc_avg, difficulty, hashrate])
-print("✅ Таблица обновлена!")
+# Получить диапазон для форматирования
+row_count = len(sheet.get_all_values())
+start = row_count - 2  # индекс заголовка
+end = row_count        # индекс после последней строки
 
-telegram_token = os.getenv("TELEGRAM_TOKEN")
-telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
+# Подготовка запроса для цветного форматирования и границ
+requests_body = {
+    "requests": [
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": start,
+                    "endRowIndex": start + 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 4
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
+                        "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True}
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat)"
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": start + 1,
+                    "endRowIndex": start + 2,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 4
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85}
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor)"
+            }
+        },
+        {
+            "updateBorders": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": 0,
+                    "endRowIndex": row_count,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 4
+                },
+                "top": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+                "bottom": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+                "left": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+                "right": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+                "innerHorizontal": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+                "innerVertical": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}}
+            }
+        }
+    ]
+}
 
-if telegram_token and telegram_chat_id:
-    send_telegram_message(telegram_token, telegram_chat_id, "Таблица Bitcoin Sheet успешно обновлена!")
-else:
-    print("Telegram токен или chat_id не найдены в переменных окружения")
+# Отправить изменения оформления
+service.spreadsheets().batchUpdate(spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU", body=requests_body).execute()
+print(f"✅ Данные за {today} добавлены и оформлены рамками и цветом.")
+
+# Отправить уведомление в Telegram
+send_telegram_message(f"✅ Таблица обновлена: {today}, Курс BTC: {btc_avg}, Сложность: {difficulty}, Хешрейт: {hashrate}")
