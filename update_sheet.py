@@ -57,10 +57,55 @@ else:
 difficulty, hashrate = get_difficulty_and_hashrate()
 today = get_today_moldova()
 
-# Сначала добавляем строку заголовков
-sheet.append_row(headers)
+# --- Сдвигаем все строки вниз на 2 (вставляем 2 пустые сверху) ---
+sheet.insert_row([], index=1)  # пустая строка сверху (для отступа)
+sheet.insert_row([], index=1)  # ещё одна пустая строка сверху
 
-# Потом добавляем строку с данными
-sheet.append_row([today, str(btc_avg), difficulty, hashrate])
+# --- Вставляем заголовки в строку 1 ---
+sheet.insert_row(headers, index=1)
 
-print("✅ Таблица обновлена с заголовками и данными!")
+# --- Вставляем данные в строку 2 ---
+sheet.insert_row([today, str(btc_avg), difficulty, hashrate], index=2)
+
+# --- Форматируем первую строку (заголовки) цветом ---
+spreadsheet_id = "1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU"
+spreadsheet = client.open_by_key(spreadsheet_id)
+worksheet_id = sheet._properties['sheetId']  # id листа
+
+# Цвет желтый, значения от 0 до 1 (RGBA)
+yellow_bg = {
+    "red": 1,
+    "green": 1,
+    "blue": 0,
+    "alpha": 1
+}
+
+body = {
+    "requests": [
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": worksheet_id,
+                    "startRowIndex": 0,
+                    "endRowIndex": 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": len(headers)
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": yellow_bg,
+                        "horizontalAlignment": "CENTER",
+                        "textFormat": {
+                            "bold": True
+                        }
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"
+            }
+        }
+    ]
+}
+
+spreadsheet.batch_update(body)
+
+print("✅ Таблица обновлена с заголовками, отступом и цветом!")
