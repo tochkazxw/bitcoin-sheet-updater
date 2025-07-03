@@ -18,11 +18,11 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
-# Получить текущую дату с временем по Молдове
-def get_today_moldova_with_time():
+# Получить текущую дату
+def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
-    return now.strftime("%d.%m.%Y,%H:%M")  # формат: 04.07.2025,09:00
+    return now.strftime("%d.%m.%Y")
 
 # Получение курса
 def get_coindesk_price():
@@ -49,13 +49,13 @@ def get_difficulty_and_hashrate():
         return "N/A", "N/A"
 
 # Получить данные
-today = get_today_moldova_with_time()
+today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
 # Добавить строки
-headers = ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th"]
+headers = ["Параметры сети", "Курс", "Сложность ", "Общий хешрейт сети, Th"]
 data_row = [today, str(btc_avg), difficulty, hashrate]
 sheet.append_row(headers)
 sheet.append_row(data_row)
@@ -91,7 +91,7 @@ requests_body = {
                 "range": {
                     "sheetId": sheet_id,
                     "startRowIndex": start + 1,
-                    "endRowIndex": end,
+                    "endRowIndex": end + 1,
                     "startColumnIndex": 0,
                     "endColumnIndex": 4
                 },
@@ -123,7 +123,6 @@ requests_body = {
     ]
 }
 
-# Отправить изменения оформления
+# Отправить изменения
 service.spreadsheets().batchUpdate(spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU", body=requests_body).execute()
-
 print(f"✅ Данные за {today} добавлены, оформлены рамками и цветом.")
