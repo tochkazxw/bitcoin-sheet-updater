@@ -3,21 +3,28 @@ from oauth2client.service_account import ServiceAccountCredentials
 import requests
 import datetime
 import pytz
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
 
-# Авторизация
+# Авторизация gspread
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
-spreadsheet_id = "1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU"
-sheet = client.open_by_key(spreadsheet_id).sheet1
+sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
+sheet_id = sheet._properties['sheetId']
 
-# Получение даты по Молдове
+# Авторизация Google Sheets API
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+service = build("sheets", "v4", credentials=credentials)
+
+# Получить текущую дату
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
-# Получение цены BTC
+# Получение курса
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -32,58 +39,90 @@ def get_coingecko_price():
     except:
         return None
 
-# Получение сложности и хешрейта
+# Сложность и хешрейт
 def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
         hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
-        diff_str = f"{diff:.2E}"
-        hashrate_str = f"{int(hashrate)}"
-        return diff_str, hashrate_str
+        return f"{diff:.2E}", str(int(hashrate))
     except:
         return "N/A", "N/A"
 
-# Получение всех данных
+# Получить данные
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Добавление в таблицу
+# Добавить строки
 headers = ["Дата", "Средний курс BTC", "Сложность сети", "Хешрейт сети"]
 data_row = [today, str(btc_avg), difficulty, hashrate]
-
 sheet.append_row(headers)
 sheet.append_row(data_row)
-print(f"✅ Добавлены данные за {today}")
 
-# Добавление рамок ко всей таблице
-spreadsheet = client.open_by_key(spreadsheet_id)
-worksheet_id = sheet._properties['sheetId']
+# Получить диапазон для форматирования
 row_count = len(sheet.get_all_values())
-col_count = len(headers)
+start = row_count - 2
+end = row_count
 
-border_request = {
+# Подготовка запроса для цветного форматирования и границ
+requests_body = {
     "requests": [
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": start,
+                    "endRowIndex": start + 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 4
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
+                        "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True}
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat)"
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": start + 1,
+                    "endRowIndex": end + 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 4
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85}
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor)"
+            }
+        },
         {
             "updateBorders": {
                 "range": {
-                    "sheetId": worksheet_id,
+                    "sheetId": sheet_id,
                     "startRowIndex": 0,
                     "endRowIndex": row_count,
                     "startColumnIndex": 0,
-                    "endColumnIndex": col_count
+                    "endColumnIndex": 4
                 },
-                "top":    {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+                "top": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
                 "bottom": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "left":   {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "right":  {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+                "left": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+                "right": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
                 "innerHorizontal": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "innerVertical":   {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}}
+                "innerVertical": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}}
             }
         }
     ]
 }
 
-spreadsheet.batch_update(border_request)
-print("🟦 Таблица оформлена с рамками.")
+# Отправить изменения
+service.spreadsheets().batchUpdate(spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU", body=requests_body).execute()
+print(f"✅ Данные за {today} добавлены, оформлены рамками и цветом.")
