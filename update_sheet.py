@@ -47,8 +47,7 @@ def get_today_moldova():
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
-# Заголовки
-headers = ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th"]
+headers = ["Дата", "Средний курс BTC", "Сложность сети", "Хешрейт сети"]
 
 # Проверяем, есть ли данные в таблице, если нет — добавляем заголовки
 rows = sheet.get_all_values()
@@ -56,7 +55,6 @@ if len(rows) == 0:
     sheet.append_row(headers)
     print("Добавлены заголовки")
 
-# Получаем цены BTC
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 if not prices:
     print("Не удалось получить цены BTC ни с одного источника.")
@@ -67,15 +65,13 @@ else:
 difficulty, hashrate = get_difficulty_and_hashrate()
 today = get_today_moldova()
 
-# Добавляем новую строку с данными
 sheet.append_row([today, str(btc_avg), difficulty, hashrate])
 print("✅ Таблица обновлена!")
 
-# Обновляем рамки на всей таблице (включая заголовки и данные)
+# Добавляем рамки на всю таблицу
 spreadsheet = client.open_by_key(spreadsheet_id)
 worksheet_id = sheet._properties['sheetId']
 
-# Обновим значения с get_all_values, чтобы учесть новую строку
 all_values = sheet.get_all_values()
 row_count = len(all_values)
 col_count = len(headers)
@@ -95,4 +91,12 @@ border_request = {
                 "bottom": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
                 "left":   {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
                 "right":  {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "innerHorizontal": {"style": "SOLID", "widt
+                "innerHorizontal": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+                "innerVertical":   {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}}
+            }
+        }
+    ]
+}
+
+spreadsheet.batch_update(border_request)
+print("✅ Рамки добавлены ко всей таблице!")
