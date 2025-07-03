@@ -2,9 +2,9 @@ name: Update Bitcoin Sheet
 
 on:
   schedule:
-    - cron: '0 6 * * *'   # 06:00 UTC = 09:00 по Молдове
-    - cron: '0 15 * * *'  # 15:00 UTC = 18:00 по Молдове
-  workflow_dispatch:       # ручной запуск из GitHub UI
+    - cron: '0 6 * * *'   # 06:00 UTC (09:00 Молдова)
+    - cron: '0 15 * * *'  # 15:00 UTC (18:00 Молдова)
+  workflow_dispatch:
 
 jobs:
   update-sheet:
@@ -14,7 +14,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
@@ -26,9 +26,7 @@ jobs:
 
       - name: Write credentials.json
         run: |
-          printf '%s' "$GOOGLE_CREDENTIALS" > credentials.json
-        env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          echo "${{ secrets.GOOGLE_CREDENTIALS }}" > credentials.json
 
-      - name: Run script
+      - name: Run update script
         run: python update_sheet.py
