@@ -11,13 +11,13 @@ client = gspread.authorize(creds)
 spreadsheet_id = "1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU"
 sheet = client.open_by_key(spreadsheet_id).sheet1
 
-# Получаем дату в часовом поясе Молдовы
+# Получение даты по Молдове
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
-# Получаем курс BTC
+# Получение цены BTC
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -32,7 +32,7 @@ def get_coingecko_price():
     except:
         return None
 
-# Сложность и хешрейт
+# Получение сложности и хешрейта
 def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
@@ -43,21 +43,21 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# Основные данные
+# Получение всех данных
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Добавляем заголовки + данные
+# Добавление в таблицу
 headers = ["Дата", "Средний курс BTC", "Сложность сети", "Хешрейт сети"]
 data_row = [today, str(btc_avg), difficulty, hashrate]
 
 sheet.append_row(headers)
 sheet.append_row(data_row)
-print(f"✅ Добавлены заголовки и данные за {today}")
+print(f"✅ Добавлены данные за {today}")
 
-# Обновляем рамки
+# Добавление рамок ко всей таблице
 spreadsheet = client.open_by_key(spreadsheet_id)
 worksheet_id = sheet._properties['sheetId']
 row_count = len(sheet.get_all_values())
@@ -86,4 +86,4 @@ border_request = {
 }
 
 spreadsheet.batch_update(border_request)
-print("📊 Рамки применены ко всей таблице.")
+print("🟦 Таблица оформлена с рамками.")
