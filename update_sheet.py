@@ -82,8 +82,9 @@ developer_hashrate = 3105
 growth_coefficient = "15%"
 total_hashrate = 172500
 useful_hashrate = 167670
+
 try:
-    share_attracted = round((attracted_hashrate / float(hashrate)) * 100, 2)
+    share_attracted = f"{(attracted_hashrate / float(hashrate)) * 100:.2f}"
 except:
     share_attracted = "N/A"
 
@@ -96,7 +97,7 @@ dev_usdt = "4863.96"
 # Таблица
 rows = [
     ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт сети, Th", "Доля привлечённого хешрейта, %"],
-    [today, str(btc_avg), difficulty, hashrate, str(share_attracted)],
+    [today, str(btc_avg), difficulty, hashrate, share_attracted],
 
     [],
     ["Кол-во майнеров", "Стоковый хешрейт, Th", "Привлечённый хешрейт, Th", "Распределение", "Хешрейт к распределению"],
