@@ -2,9 +2,9 @@ name: Update Bitcoin Sheet
 
 on:
   schedule:
-    - cron: '0 6 * * *'   # 06:00 UTC (09:00 по Молдове)
-    - cron: '0 15 * * *'  # 15:00 UTC (18:00 по Молдове)
-  workflow_dispatch:       # Ручной запуск
+    - cron: '0 7 * * *'   
+    - cron: '0 15 * * *'  
+  workflow_dispatch:       
 
 jobs:
   update-sheet:
