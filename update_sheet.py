@@ -5,8 +5,8 @@ import datetime
 import pytz
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from decimal import Decimal
 import os
+from decimal import Decimal
 
 # Авторизация
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -31,7 +31,7 @@ def send_telegram_message(text):
     except:
         pass
 
-# Дата
+# Время и дата
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
@@ -57,75 +57,59 @@ def get_difficulty_and_hashrate():
     try:
         difficulty = requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text
         hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
-        return format(Decimal(difficulty), 'f'), str(int(hashrate))
+        return difficulty, str(int(hashrate))
     except:
         return "N/A", "N/A"
 
-# Основные значения
+# Получение значений
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Данные
-num_miners = 1000
-stock_hashrate = 150000
-attracted_hashrate = 172500
-distribution = "2.80%"
-hashrate_distribution_ratio = 4830
-avg_hashrate_per_miner = 150
-hashrate_growth = 22500
-partner_share = "1.00%"
-developer_share = "1.80%"
-partner_hashrate = 1725
-developer_hashrate = 3105
-growth_coefficient = "15%"
-total_hashrate = 172500
-useful_hashrate = 167670
+# Стартовая строка
+start_row = len(sheet.get_all_values()) + 2
+r = start_row
 
-share_attracted = 0.04
-
-# Доход BTC и USDT
-partner_btc = "0.02573522"
-dev_btc = "0.04632340"
-partner_usdt = "2702.20"
-dev_usdt = "4863.96"
-
-# Таблица
+# Формулы вместо значений
 rows = [
     ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт сети, Th", "Доля привлечённого хешрейта, %"],
-    [today, str(btc_avg), difficulty, hashrate, share_attracted],
+    [today, btc_avg, difficulty, hashrate, 0.04],
 
     [],
     ["Кол-во майнеров", "Стоковый хешрейт, Th", "Привлечённый хешрейт, Th", "Распределение", "Хешрейт к распределению"],
-    [num_miners, stock_hashrate, attracted_hashrate, distribution, hashrate_distribution_ratio],
+    [1000, 150000, f"=B{r+4}+B{r+6}", "2.80%", f"=C{r+4}*D{r+4}"],
 
     [],
     ["Средний хеш на майнер", "Прирост хешрейта, Th", "-", "Партнёр", "Разработчик"],
-    [avg_hashrate_per_miner, hashrate_growth, "-", partner_share, developer_share],
+    [150, 22500, "-", "1.00%", "1.80%"],
 
     [],
     ["Коэфф. прироста", "Суммарный хешрейт, Th", "-", "Партнёр хешрейт", "Разработчик хешрейт"],
-    [growth_coefficient, total_hashrate, "-", partner_hashrate, developer_hashrate],
+    ["15%", f"=C{r+4}", "-", f"=E{r+4}*D{r+8}", f"=E{r+4}*E{r+8}"],
 
     [],
     ["Полезный хешрейт, Th", "Доход 30 дней,BTC(Партнёр)", "Доход 30 дней,BTC(Разработчик)"],
-    [useful_hashrate, partner_btc, dev_btc],
+    [f"=B{r+10}*0.9736",
+     f"=(30*86400*3.125*D{r+10}*1000000000000)/(C{r+1}*4294967296)",
+     f"=(30*86400*3.125*E{r+10}*1000000000000)/(C{r+1}*4294967296)"],
 
     ["", "Доход 30 дней,USDT(Партнёр)", "Доход 30 дней,USDT(Разработчик)"],
-    ["", partner_usdt, dev_usdt],
+    ["", f"=B{r+12}*B{r+1}", f"=C{r+12}*B{r+1}"],
 ]
 
-# Добавление строк
-sheet.append_row([])
-for row in rows:
-    sheet.append_row(row)
+# Удалим пустые строки
+rows = [row for row in rows if row]
+
+# Массовая вставка
+end_row = r + len(rows) - 1
+sheet.update(f"A{r}:E{end_row}", rows)
 
 # Telegram
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
     f"Сложность: {difficulty}\n"
-    f"Хешрейт: {hashrate}\n"
+    f"Хешрейт: {hashrate} Th/s\n"
     f"Ссылка: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
 )
