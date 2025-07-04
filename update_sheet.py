@@ -79,20 +79,23 @@ prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not N
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-labels = ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th"]
-data_row = [today, str(btc_avg), difficulty, hashrate]
+# Подписи и данные
+labels = ["Дата", "Курс BTC (USD)", "Сложность", "Общий хешрейт сети, Th"]
+values = [today, str(btc_avg), difficulty, hashrate]
 
-# Добавляем подписи, данные и пустую строку для отступа
+# Добавляем пустую строку для отступа
+sheet.append_row([""] * len(labels))
+
+# Добавляем подписи и данные
 sheet.append_row(labels)
-sheet.append_row(data_row)
-sheet.append_row([""] * len(labels))  # пустая строка для отступа
+sheet.append_row(values)
 
 # Получаем текущее количество строк
 row_count = len(sheet.get_all_values())
 
 # Индексы строк для форматирования (подписи и данные)
-start = row_count - 3  # индекс строки с подписями
-end = start + 2        # до строки с данными включительно
+start = max(row_count - 3, 0)  # минимальное значение 0
+end = start + 2                # захватываем 2 строки: подписи + данные
 
 # Форматирование: цвет фона и черный текст для подписи и данных
 requests_body = {
@@ -158,10 +161,9 @@ requests_body = {
     ]
 }
 
+# Применяем оформление
 service.spreadsheets().batchUpdate(spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU", body=requests_body).execute()
-print(f"✅ Данные за {today} добавлены и оформлены с отступом и черным шрифтом.")
+print(f"✅ Данные за {today} добавлены и оформлены рамками и цветом.")
 
 # Отправляем уведомление в Telegram
-send_telegram_message(
-    f"✅ Таблица обновлена:\nДата: {today}\nКурс BTC: {btc_avg}\nСложность: {difficulty}\nХешрейт: {hashrate}"
-)
+send_telegram_message(f"✅ Таблица обновлена: {today}, Курс BTC: {btc_avg}, Сложность: {difficulty}, Хешрейт: {hashrate}")
