@@ -23,7 +23,6 @@ spreadsheet = service.spreadsheets().get(spreadsheetId=sheet.spreadsheet.id).exe
 sheet_id = next(s["properties"]["sheetId"] for s in spreadsheet["sheets"] if s["properties"]["title"] == sheet.title)
 
 # Telegram
-
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -37,14 +36,12 @@ def send_telegram_message(text):
         pass
 
 # Дата
-
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
 # Курс BTC
-
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -60,7 +57,6 @@ def get_coingecko_price():
         return None
 
 # Сложность и хешрейт
-
 def get_difficulty_and_hashrate():
     try:
         difficulty = requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text
@@ -84,16 +80,21 @@ values = [
     ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th", "Доля привлеченного хешрейта, %"],
     [today, btc_avg, difficulty, hashrate, 0.04],
 
-    ["Количество майнеров", "Стоковый хешрейт", "Прирост хешрейта", "Распределение", "Хеш к распределению"],
-    ["=1000", "=A5*A7", "=B5*A9", 0.028, "=C5*E5"],
+    ["Количество майнеров", "Стоковый хешрейт, Th", "Прирост хешрейта, Th", "Суммарный хешрейт, Th", "Полезный хешрейт, Th"],
+    ["=1000", "=A4*A6", "=B4*A8", "=B4+B6", "=D4-D4*E2"],
 
-    ["Средний хеш на майнер", "Суммарный хешрейт", "Полезный хеш", "Партнер", "Разработчик"],
-    ["=150", "=B5+C5", "=B6-B6*D5", 0.01, 0.018],
+    ["Средний хеш на майнер", "Коэффициент прироста", "Распределение", "Хеш к распределению", ""],
+    [150, 0.15, 0.028, "=C4*C6", ""],
 
-    ["Коэф. прироста", "Партнерский хеш", "Разработческий хеш", "Доход BTC (Партнер)", "Доход BTC (Разработчик)"],
-    ["=15%", "=C5*D7", "=C5*E7", "=(30*86400*3.125*B8*1E12)/(C2*4294967296)", "=(30*86400*3.125*C8*1E12)/(C2*4294967296)"],
+    ["Партнер", "Разработчик", "Партнер хеш", "Разработчик хеш", ""],
+    [0.01, 0.018, "=C6*A8", "=C6*B8", ""],
 
-    ["", "Доход USDT (Партнер)", "Доход USDT (Разработчик)", "=B9*B2", "=C9*B2"]
+    ["Доход BTC (Партнер)", "Доход BTC (Разработчик)", "Доход USDT (Партнер)", "Доход USDT (Разработчик)", ""],
+    [
+        "=(30*86400*3.125*C8*1E12)/(C2*4294967296)",
+        "=(30*86400*3.125*D8*1E12)/(C2*4294967296)",
+        "=A10*B2", "=B10*B2", ""
+    ]
 ]
 
 # Вставка значений в Google Sheets
