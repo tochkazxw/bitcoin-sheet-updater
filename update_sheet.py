@@ -73,49 +73,45 @@ def get_difficulty_and_hashrate():
         return "N/A", "N/A"
 
 # Основная логика
-
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Подписи и данные
-labels = ["Параметры сети", "Курс BTC", "Сложность", "Общий хешрейт сети, Th"]
-values = [today, str(btc_avg), difficulty, hashrate]
+# Подписи для данных
+labels = ["Дата", "Средний курс BTC (USD)", "Сложность", "Общий хешрейт сети, Th"]
 
 # Добавляем пустую строку для отступа
-sheet.append_row([""] * len(labels))
+sheet.append_row([])
 
 # Добавляем подписи и данные
 sheet.append_row(labels)
-sheet.append_row(values)
+sheet.append_row([today, str(btc_avg), difficulty, hashrate])
 
-# Получаем текущее количество строк
+# Получаем количество строк после добавления
 row_count = len(sheet.get_all_values())
 
-# Индексы строк для форматирования (подписи и данные)
-start = max(row_count - 3, 0)  # минимальное значение 0
-end = start + 2                # захватываем 2 строки: подписи + данные
+# Индексы добавленных строк
+empty_row_index = row_count - 3
+header_row_index = row_count - 2
+data_row_index = row_count - 1
 
-# Форматирование: цвет фона и черный текст для подписи и данных
+# Форматируем добавленные строки (без пустой)
 requests_body = {
     "requests": [
         {
             "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": start,
-                    "endRowIndex": start + 1,
+                    "startRowIndex": header_row_index,
+                    "endRowIndex": header_row_index + 1,
                     "startColumnIndex": 0,
-                    "endColumnIndex": len(labels)
+                    "endColumnIndex": 4
                 },
                 "cell": {
                     "userEnteredFormat": {
                         "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
-                        "textFormat": {
-                            "foregroundColor": {"red": 0, "green": 0, "blue": 0},
-                            "bold": True
-                        }
+                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}, "bold": True}
                     }
                 },
                 "fields": "userEnteredFormat(backgroundColor,textFormat)"
@@ -125,17 +121,15 @@ requests_body = {
             "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": start + 1,
-                    "endRowIndex": start + 2,
+                    "startRowIndex": data_row_index,
+                    "endRowIndex": data_row_index + 1,
                     "startColumnIndex": 0,
-                    "endColumnIndex": len(labels)
+                    "endColumnIndex": 4
                 },
                 "cell": {
                     "userEnteredFormat": {
                         "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85},
-                        "textFormat": {
-                            "foregroundColor": {"red": 0, "green": 0, "blue": 0}
-                        }
+                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
                     }
                 },
                 "fields": "userEnteredFormat(backgroundColor,textFormat)"
@@ -145,10 +139,10 @@ requests_body = {
             "updateBorders": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": start,
-                    "endRowIndex": end,
+                    "startRowIndex": header_row_index,
+                    "endRowIndex": data_row_index + 1,
                     "startColumnIndex": 0,
-                    "endColumnIndex": len(labels)
+                    "endColumnIndex": 4
                 },
                 "top": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
                 "bottom": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
@@ -161,9 +155,18 @@ requests_body = {
     ]
 }
 
-# Применяем оформление
-service.spreadsheets().batchUpdate(spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU", body=requests_body).execute()
-print(f"✅ Данные за {today} добавлены и оформлены рамками и цветом.")
+# Применяем форматирование
+service.spreadsheets().batchUpdate(
+    spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
+    body=requests_body
+).execute()
+
+print(f"✅ Данные за {today} добавлены и оформлены.")
 
 # Отправляем уведомление в Telegram
-send_telegram_message(f"✅ Таблица обновлена: {today}, Курс BTC: {btc_avg}, Сложность: {difficulty}, Хешрейт: {hashrate}")
+send_telegram_message(
+    f"✅ Таблица обновлена: {today}\n"
+    f"Средний курс BTC (USD): {btc_avg}\n"
+    f"Сложность: {difficulty}\n"
+    f"Хешрейт: {hashrate}"
+)
