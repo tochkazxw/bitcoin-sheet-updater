@@ -3,8 +3,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 import requests
 import datetime
 import pytz
-from googleapiclient.discovery import build
-from google.oauth2 import service_account
 import os
 
 # Авторизация gspread
@@ -12,11 +10,6 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
-
-# Авторизация Google Sheets API (если нужно для форматирования)
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
-service = build("sheets", "v4", credentials=credentials)
 
 # Функция отправки сообщения в Telegram
 def send_telegram_message(text):
@@ -96,23 +89,25 @@ earnings_30days_usdt = "" # можно вставить
 useful_hashrate = 167670
 share_attracted_hashrate = "0.04"
 
-# Очистка всего листа
-sheet.clear()
+# Формируем строки с заголовками и данными
+rows = [
+    ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"],
+    [today, str(btc_avg), difficulty, hashrate, share_attracted_hashrate],
+    ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
+    [miners, stock_hashrate, attracted_hashrate, distribution, hashrate_distribution_ratio],
+    ["Средний хеш на майнер", "Прирост хешрейта", "-", "Партнер", "Разработчик"],
+    [avg_hashrate_per_miner, hashrate_growth, "-", partner_share, developer_share],
+    ["Коэфф. прироста", "Суммарный хешрейт", "-", partner_hashrate, developer_hashrate],
+    [growth_coefficient, total_hashrate, "Доход за 30 дней, BTC", "-", "-"],
+    ["Полезный хешрейт, Th", useful_hashrate, "Доход за 30 дней, USDT", "-", "-"]
+]
 
-# Добавляем строки с заголовками и данными
-sheet.append_row(["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"])
-sheet.append_row([today, str(btc_avg), difficulty, hashrate, share_attracted_hashrate])
+# Добавляем пустую строку для разделения перед новым блоком данных
+sheet.append_row([])
 
-sheet.append_row(["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"])
-sheet.append_row([miners, stock_hashrate, attracted_hashrate, distribution, hashrate_distribution_ratio])
-
-sheet.append_row(["Средний хеш на майнер", "Прирост хешрейта", "-", "Партнер", "Разработчик"])
-sheet.append_row([avg_hashrate_per_miner, hashrate_growth, "-", partner_share, developer_share])
-
-sheet.append_row(["Коэфф. прироста", "Суммарный хешрейт", "-", partner_hashrate, developer_hashrate])
-sheet.append_row([growth_coefficient, total_hashrate, "Доход за 30 дней, BTC", "-", "-"])
-
-sheet.append_row(["Полезный хешрейт, Th", useful_hashrate, "Доход за 30 дней, USDT", "-", "-"])
+# Добавляем все строки с заголовками и данными
+for row in rows:
+    sheet.append_row(row)
 
 # Отправляем уведомление в Telegram
 send_telegram_message(
