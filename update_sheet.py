@@ -72,35 +72,49 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# Основная логика
+# Основные переменные
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Заголовки и данные
-labels1 = ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт"]
-data1 = [today, str(btc_avg), difficulty, hashrate]
+# Дополнительные значения
+miners = 1000
+stock_hashrate = 150000
+attracted_hashrate = 172500
+distribution = "2.80%"
+avg_hashrate_per_miner = 150
+hashrate_growth = 22500
+partner_share = "1%"
+developer_share = "1.8%"
+partner_hashrate = 1725
+developer_hashrate = 3105
+growth_coefficient = "15%"
+total_hashrate = 172500
+earnings_btc = ""
+earnings_usdt = ""
 
-labels2 = ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение"]
-data2 = [1000, 150000, 172500, "2.80%"]
-
-labels3 = ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"]
-data3 = [150, 22500, "", "1%", "1.8%"]
-
-labels4 = ["", "", "", "1725", "3105"]
-labels5 = ["Коэфф. прироста", "Суммарный хешрейт", "", "Доход за 30 дней, BTC", "Тут будут данные"]
-data5 = ["15%", 172500, "", "", ""]
-data6 = ["Полезный хешрейт, Th", "167670", "Доход за 30 дней, USDT", "Тут будут данные", "Тут будут данные"]
-
-# Очередь на добавление
-rows = [labels1, data1, labels2, data2, labels3, data3, labels4, labels5, data5, data6]
+# Данные
+rows = [
+    ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт"],
+    [today, str(btc_avg), difficulty, hashrate],
+    ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение"],
+    [miners, stock_hashrate, attracted_hashrate, distribution],
+    ["Средний хеш на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"],
+    [avg_hashrate_per_miner, hashrate_growth, "", partner_share, developer_share],
+    ["", "", "", partner_hashrate, developer_hashrate],
+    ["Коэфф. прироста", "Суммарный хешрейт", "Доход за 30 дней, BTC", "", ""],
+    [growth_coefficient, total_hashrate, earnings_btc, "", ""],
+    ["Полезный хешрейт, Th", "", "Доход за 30 дней, USDT", "", ""],
+    ["167670", "", earnings_usdt, "", ""]
+]
 
 # Добавляем строки в таблицу
+sheet.append_row([])  # отступ
 for row in rows:
     sheet.append_row(row)
 
-# Telegram уведомление
+# Telegram-уведомление
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
@@ -108,5 +122,3 @@ send_telegram_message(
     f"Хешрейт: {hashrate}\n"
     f"Ссылка на таблицу: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
 )
-
-print(f"✅ Данные за {today} добавлены и оформлены.")
