@@ -19,28 +19,35 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
+# Функция отправки сообщения в Telegram
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
-        print("⚠️ TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID не заданы")
+        print("⚠️ Не заданы TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID в переменных окружения.")
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
     try:
         resp = requests.post(url, data=payload, timeout=10)
         if resp.status_code == 200:
             print("✅ Уведомление в Telegram отправлено.")
         else:
-            print(f"❌ Ошибка отправки Telegram: {resp.text}")
+            print(f"❌ Ошибка отправки уведомления в Telegram: {resp.text}")
     except Exception as e:
-        print(f"❌ Исключение при отправке Telegram: {e}")
+        print(f"❌ Исключение при отправке Telegram уведомления: {e}")
 
+# Получить текущую дату в Молдове (дд.мм.гггг)
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
+# Получение курса с Coindesk
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -48,6 +55,7 @@ def get_coindesk_price():
     except:
         return None
 
+# Получение курса с Coingecko
 def get_coingecko_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
@@ -55,6 +63,7 @@ def get_coingecko_price():
     except:
         return None
 
+# Получение сложности и хешрейта с blockchain.info
 def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
@@ -63,67 +72,41 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# --- Основные данные ---
+# Основная логика
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
-difficulty, hashrate_network = get_difficulty_and_hashrate()
+difficulty, hashrate = get_difficulty_and_hashrate()
 
-# --- Твои дополнительные значения ---
-miners_count = 1000
-stock_hashrate = 150000
-attracted_hashrate = 172500
-distribution = "2.80%"
+# Заголовки и данные
+labels1 = ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт"]
+data1 = [today, str(btc_avg), difficulty, hashrate]
 
-average_hashrate_per_miner = 150
-hashrate_growth = 22500
-partner = "1%"
-developer = "1.8%"
+labels2 = ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение"]
+data2 = [1000, 150000, 172500, "2.80%"]
 
-growth_coefficient = "15%"
-total_hashrate = 172500
-income_30d_btc = "Тут будут данные"
-income_30d_usdt = "Тут будут данные"
+labels3 = ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"]
+data3 = [150, 22500, "", "1%", "1.8%"]
 
-useful_hashrate_th = 167670
+labels4 = ["", "", "", "1725", "3105"]
+labels5 = ["Коэфф. прироста", "Суммарный хешрейт", "", "Доход за 30 дней, BTC", "Тут будут данные"]
+data5 = ["15%", 172500, "", "", ""]
+data6 = ["Полезный хешрейт, Th", "167670", "Доход за 30 дней, USDT", "Тут будут данные", "Тут будут данные"]
 
-# Формируем строки для вставки — 9 строк с заголовками и значениями
-rows = [
-    # 1. Основные заголовки
-    ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "", "", "", ""],
-    # 2. Основные данные
-    [today, btc_avg, difficulty, hashrate_network, "", "", "", ""],
-    # 3. Дополнительные заголовки 1
-    ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "", "", "", ""],
-    # 4. Доп. данные 1
-    [miners_count, stock_hashrate, attracted_hashrate, distribution, "", "", "", ""],
-    # 5. Дополнительные заголовки 2
-    ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик", "", "", ""],
-    # 6. Доп. данные 2
-    [average_hashrate_per_miner, hashrate_growth, "", partner, developer, "", "", ""],
-    # 7. Дополнительные заголовки 3
-    ["Коэффициент прироста", "Суммарный хешрейт", "", "Доход за 30 дней, BTC", "", "", "", ""],
-    # 8. Доп. данные 3
-    [growth_coefficient, total_hashrate, "", income_30d_btc, "", "", "", ""],
-    # 9. Доп. данные 4
-    ["Полезный хешрейт, Th", useful_hashrate_th, "", "Доход за 30 дней, USDT", income_30d_usdt, "", "", ""],
-]
+# Очередь на добавление
+rows = [labels1, data1, labels2, data2, labels3, data3, labels4, labels5, data5, data6]
 
-# Добавляем пустую строку для разделения, если нужно
-sheet.append_row([])
-
-# Вставляем все строки по очереди
+# Добавляем строки в таблицу
 for row in rows:
     sheet.append_row(row)
 
-# Форматирование — аналогично твоему, можно расширять и корректировать
-# Например, выделить основную шапку и первую строку данных, и т.д.
-
-print(f"✅ Данные за {today} добавлены и оформлены.")
-
+# Telegram уведомление
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
     f"Сложность: {difficulty}\n"
-    f"Хешрейт сети: {hashrate_network}\n"
+    f"Хешрейт: {hashrate}\n"
+    f"Ссылка на таблицу: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
 )
+
+print(f"✅ Данные за {today} добавлены и оформлены.")
