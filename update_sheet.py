@@ -80,7 +80,7 @@ btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
 # Подписи и данные
-labels = ["Дата", "Курс BTC (USD)", "Сложность", "Общий хешрейт сети, Th"]
+labels = ["Параметры сети", "Курс BTC", "Сложность", "Общий хешрейт сети, Th"]
 values = [today, str(btc_avg), difficulty, hashrate]
 
 # Добавляем пустую строку для отступа
