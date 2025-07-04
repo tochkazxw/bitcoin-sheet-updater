@@ -96,26 +96,19 @@ earnings_30days_usdt = "" # можно вставить
 useful_hashrate = 167670
 share_attracted_hashrate = "0.04"
 
-# Добавляем пустую строку для визуального разделения блоков
-sheet.append_row([])
-
-# Добавляем первый блок с заголовками и данными
+# Добавляем строки с заголовками и данными без пустых строк
 sheet.append_row(["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"])
 sheet.append_row([today, str(btc_avg), difficulty, hashrate, share_attracted_hashrate])
 
-# Второй блок
 sheet.append_row(["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"])
 sheet.append_row([miners, stock_hashrate, attracted_hashrate, distribution, hashrate_distribution_ratio])
 
-# Третий блок
 sheet.append_row(["Средний хеш на майнер", "Прирост хешрейта", "-", "Партнер", "Разработчик"])
 sheet.append_row([avg_hashrate_per_miner, hashrate_growth, "-", partner_share, developer_share])
 
-# Четвёртый блок
 sheet.append_row(["Коэфф. прироста", "Суммарный хешрейт", "-", partner_hashrate, developer_hashrate])
 sheet.append_row([growth_coefficient, total_hashrate, "Доход за 30 дней, BTC", "-", "-"])
 
-# Пятый блок
 sheet.append_row(["Полезный хешрейт, Th", useful_hashrate, "Доход за 30 дней, USDT", "-", "-"])
 
 # Отправляем уведомление в Telegram
