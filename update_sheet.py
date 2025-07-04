@@ -1,90 +1,155 @@
-# Заголовки для заголовочной строки
-headers = ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th"]
-# Подписи над значениями (можно дублировать заголовки или конкретные пояснения)
-labels = ["Дата", "Средний курс BTC (USD)", "Сложность сети", "Хешрейт сети (Th/s)"]
-# Значения
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import requests
+import datetime
+import pytz
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
+import os
+
+# Авторизация gspread
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+client = gspread.authorize(creds)
+sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
+sheet_id = sheet._properties['sheetId']
+
+# Авторизация Google Sheets API для форматирования
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+service = build("sheets", "v4", credentials=credentials)
+
+# Функция отправки сообщения в Telegram
+def send_telegram_message(text):
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        print("⚠️ Не заданы TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID в переменных окружения.")
+        return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+    try:
+        resp = requests.post(url, data=payload, timeout=10)
+        if resp.status_code == 200:
+            print("✅ Уведомление в Telegram отправлено.")
+        else:
+            print(f"❌ Ошибка отправки уведомления в Telegram: {resp.text}")
+    except Exception as e:
+        print(f"❌ Исключение при отправке Telegram уведомления: {e}")
+
+# Получить текущую дату в Молдове (дд.мм.гггг)
+def get_today_moldova():
+    tz = pytz.timezone('Europe/Chisinau')
+    now = datetime.datetime.now(tz)
+    return now.strftime("%d.%m.%Y")
+
+# Получение курса с Coindesk
+def get_coindesk_price():
+    try:
+        r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
+        return float(r.json()["bpi"]["USD"]["rate_float"])
+    except:
+        return None
+
+# Получение курса с Coingecko
+def get_coingecko_price():
+    try:
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
+        return float(r.json()["bitcoin"]["usd"])
+    except:
+        return None
+
+# Получение сложности и хешрейта с blockchain.info
+def get_difficulty_and_hashrate():
+    try:
+        diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
+        hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
+        return f"{diff:.2E}", str(int(hashrate))
+    except:
+        return "N/A", "N/A"
+
+
+# --- Основная логика ---
+
+# Получаем данные
+today = get_today_moldova()
+prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
+btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
+difficulty, hashrate = get_difficulty_and_hashrate()
+
+# Подписи (заголовки параметров)
+labels = ["Дата", "Курс BTC (средний USD)", "Сложность сети", "Общий хешрейт сети, Th"]
+
+# Данные
 data_row = [today, str(btc_avg), difficulty, hashrate]
 
-# Добавляем строки
-sheet.append_row(headers)
+# Добавляем строки — сначала подписи, потом значения
 sheet.append_row(labels)
 sheet.append_row(data_row)
 
-# Общее количество строк
+# Получаем текущий размер таблицы (число строк)
 row_count = len(sheet.get_all_values())
-start_header = row_count - 3  # Заголовки
-start_labels = row_count - 2  # Подписи
-start_data = row_count - 1    # Значения
 
-# Запрос для форматирования
+# Индексы для форматирования последних двух добавленных строк
+start = row_count - 2  # строка с подписью
+end = row_count        # строка с данными
+
+# Запрос на оформление: фон + чёрный текст + рамки
 requests_body = {
     "requests": [
-        # Форматируем заголовок — фон синий, текст белый и жирный
         {
             "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": start_header,
-                    "endRowIndex": start_header + 1,
+                    "startRowIndex": start,
+                    "endRowIndex": start + 1,
                     "startColumnIndex": 0,
-                    "endColumnIndex": 4
+                    "endColumnIndex": len(labels)
                 },
                 "cell": {
                     "userEnteredFormat": {
                         "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
-                        "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True}
+                        "textFormat": {
+                            "foregroundColor": {"red": 0, "green": 0, "blue": 0},  # Чёрный текст
+                            "bold": True
+                        }
                     }
                 },
                 "fields": "userEnteredFormat(backgroundColor,textFormat)"
             }
         },
-        # Форматируем подписи — фон светло-серый, текст черный, жирный
         {
             "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": start_labels,
-                    "endRowIndex": start_labels + 1,
+                    "startRowIndex": start + 1,
+                    "endRowIndex": start + 2,
                     "startColumnIndex": 0,
-                    "endColumnIndex": 4
+                    "endColumnIndex": len(labels)
                 },
                 "cell": {
                     "userEnteredFormat": {
-                        "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9},
-                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}, "bold": True}
+                        "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85},
+                        "textFormat": {
+                            "foregroundColor": {"red": 0, "green": 0, "blue": 0}  # Чёрный текст
+                        }
                     }
                 },
                 "fields": "userEnteredFormat(backgroundColor,textFormat)"
             }
         },
-        # Форматируем данные — фон белый, текст черный
-        {
-            "repeatCell": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": start_data,
-                    "endRowIndex": start_data + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": 4
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "backgroundColor": {"red": 1, "green": 1, "blue": 1},
-                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
-                    }
-                },
-                "fields": "userEnteredFormat(backgroundColor,textFormat)"
-            }
-        },
-        # Границы для всех строк
         {
             "updateBorders": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": start_header,
-                    "endRowIndex": start_data + 1,
+                    "startRowIndex": start,
+                    "endRowIndex": end,
                     "startColumnIndex": 0,
-                    "endColumnIndex": 4
+                    "endColumnIndex": len(labels)
                 },
                 "top": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
                 "bottom": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
@@ -97,6 +162,10 @@ requests_body = {
     ]
 }
 
-# Отправляем запрос
+# Применяем оформление
 service.spreadsheets().batchUpdate(spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU", body=requests_body).execute()
-print(f"✅ Данные за {today} добавлены и оформлены с подписями.")
+
+print(f"✅ Данные за {today} добавлены и оформлены рамками и цветом.")
+
+# Отправляем уведомление в Telegram
+send_telegram_message(f"✅ Таблица обновлена: {today}\nКурс BTC: {btc_avg}\nСложность: {difficulty}\nХешрейт: {hashrate}")
