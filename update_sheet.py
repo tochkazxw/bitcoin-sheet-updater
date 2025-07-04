@@ -13,7 +13,7 @@ creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", sco
 client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 
-# Авторизация Google Sheets API для форматирования (если нужно)
+# Авторизация Google Sheets API для форматирования
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
@@ -23,7 +23,7 @@ def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
-        print("⚠️ TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID не заданы.")
+        print("⚠️ Не заданы TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID в переменных окружения.")
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
@@ -36,11 +36,11 @@ def send_telegram_message(text):
         if resp.status_code == 200:
             print("✅ Уведомление в Telegram отправлено.")
         else:
-            print(f"❌ Ошибка отправки Telegram: {resp.text}")
+            print(f"❌ Ошибка отправки уведомления в Telegram: {resp.text}")
     except Exception as e:
-        print(f"❌ Исключение при отправке Telegram: {e}")
+        print(f"❌ Исключение при отправке Telegram уведомления: {e}")
 
-# Получить текущую дату в Молдове
+# Получить текущую дату в Молдове (дд.мм.гггг)
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
@@ -82,6 +82,7 @@ miners = 1000
 stock_hashrate = 150000
 attracted_hashrate = 172500
 distribution = "2.80%"
+hashrate_distribution_ratio = 4830
 avg_hashrate_per_miner = 150
 hashrate_growth = 22500
 partner_share = "1%"
@@ -90,36 +91,32 @@ partner_hashrate = 1725
 developer_hashrate = 3105
 growth_coefficient = "15%"
 total_hashrate = 172500
-earnings_btc = ""
-earnings_usdt = ""
+earnings_30days_btc = ""  # Можно вставить данные, если есть
+earnings_30days_usdt = "" # Можно вставить данные, если есть
 useful_hashrate = 167670
+share_attracted_hashrate = "0.04"
 
-# Подготовка данных
+# Формируем данные для вставки по строкам
 rows = [
-    ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт"],
-    [today, str(btc_avg), difficulty, hashrate],
-    ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение"],
-    [miners, stock_hashrate, attracted_hashrate, distribution],
-    ["Средний хеш на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"],
-    [avg_hashrate_per_miner, hashrate_growth, "", partner_share, developer_share],
-    ["", "", "", partner_hashrate, developer_hashrate],
-    ["Коэфф. прироста", "Суммарный хешрейт", "", "", ""],
-    [growth_coefficient, total_hashrate, "Доход за 30 дней, BTC", "", ""],
-    ["Полезный хешрейт, Th", useful_hashrate, "Доход за 30 дней, USDT", "", ""],
-    ["", "", "", "", ""]
+    ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"],
+    [today, str(btc_avg), difficulty, hashrate, share_attracted_hashrate],
+    ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
+    [miners, stock_hashrate, attracted_hashrate, distribution, hashrate_distribution_ratio],
+    ["Средний хеш на майнер", "Прирост хешрейта", "-", "Партнер", "Разработчик"],
+    [avg_hashrate_per_miner, hashrate_growth, "-", partner_share, developer_share],
+    ["Коэфф. прироста", "Суммарный хешрейт", "-", partner_hashrate, developer_hashrate],
+    [growth_coefficient, total_hashrate, f"Доход за 30 дней, BTC", "-", "-"],
+    ["Полезный хешрейт, Th", useful_hashrate, "Доход за 30 дней, USDT", "-", "-"]
 ]
 
-# Очистим лист перед добавлением (если нужно)
-# sheet.clear()
-
-# Добавим пустую строку для отступа, если надо
+# Добавляем пустую строку для разделения
 sheet.append_row([])
 
-# Добавляем все строки
+# Добавляем строки в таблицу
 for row in rows:
     sheet.append_row(row)
 
-# Отправляем Telegram уведомление
+# Отправляем уведомление в Telegram
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
