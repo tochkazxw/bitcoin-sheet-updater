@@ -1,4 +1,4 @@
-import gspread
+""import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import requests
 import datetime
@@ -75,25 +75,25 @@ difficulty, hashrate = get_difficulty_and_hashrate()
 all_rows = sheet.get_all_values()
 r = len(all_rows) + 2
 
-# Формулы с учётом избежания циклических зависимостей
+# Формулы (корректные и с процентами)
 values = [
     ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт сети, Th", "Доля привлечённого хешрейта, %"],
-    [today, btc_avg, difficulty, hashrate, "0,04"],
+    [today, btc_avg, difficulty, hashrate, "=4%"],
 
     ["Кол-во майнеров", "Стоковый хешрейт, Th", "Привлечённый хешрейт, Th", "Распределение", "Хешрейт к распределению"],
-    ["1000", "150000", "=A{0}*B{0}".format(r+3), "0,028", "=C{0}*D{0}".format(r+3)],
+    ["1000", "150000", f"=B{r+3}*E{r+1}", "=2,8%", f"=C{r+3}*D{r+3}"],
 
     ["Средний хеш на майнер", "Прирост хешрейта, Th", "-", "Партнёр", "Разработчик"],
-    ["=B{0}/A{0}".format(r+3), "=C{0}-B{0}".format(r+3), "-", "0,01", "0,018"],
+    [f"=B{r+3}/A{r+3}", f"=C{r+3}-B{r+3}", "-", "=1%", "=1,8%"],
 
     ["Коэфф. прироста", "Суммарный хешрейт, Th", "-", "Партнёр хешрейт", "Разработчик хешрейт"],
-    ["15%", "=B{0}+B{1}".format(r+3, r+5), "-", "=E{0}*D{1}".format(r+3, r+5), "=E{0}*E{1}".format(r+3, r+5)],
+    [f"=(B{r+5}-B{r+3})/B{r+3}", f"=B{r+3}+B{r+5}", "-", f"=E{r+3}*D{r+5}", f"=E{r+3}*E{r+5}"],
 
     ["Полезный хешрейт, Th", "Доход 30 дней,BTC(Партнёр)", "Доход 30 дней,BTC(Разработчик)"],
-    ["=B{0}*0,9736".format(r+7), "=3,125*D{0}*1000000000000/(C{1}*4294967296)".format(r+7, r+1), "=3,125*E{0}*1000000000000/(C{1}*4294967296)".format(r+7, r+1)],
+    [f"=B{r+7}*0,9736", f"=3,125*D{r+7}*1E12/(C{r+1}*2^32)", f"=3,125*E{r+7}*1E12/(C{r+1}*2^32)"],
 
     ["", "Доход 30 дней,USDT(Партнёр)", "Доход 30 дней,USDT(Разработчик)"],
-    ["", "=B{0}*B{1}".format(r+9, r+1), "=C{0}*B{1}".format(r+9, r+1)]
+    ["", f"=B{r+9}*B{r+1}", f"=C{r+9}*B{r+1}"]
 ]
 
 # Вставка значений
@@ -104,6 +104,33 @@ service.spreadsheets().values().update(
     valueInputOption="USER_ENTERED",
     body={"values": values}
 ).execute()
+
+# Применение процентного формата для нужных ячеек
+format_request = {
+    "requests": [
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": r - 1,
+                    "endRowIndex": r - 1 + len(values),
+                    "startColumnIndex": 3,
+                    "endColumnIndex": 5
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "numberFormat": {
+                            "type": "PERCENT",
+                            "pattern": "0.00%"
+                        }
+                    }
+                },
+                "fields": "userEnteredFormat.numberFormat"
+            }
+        }
+    ]
+}
+service.spreadsheets().batchUpdate(spreadsheetId=sheet.spreadsheet.id, body=format_request).execute()
 
 # Telegram
 send_telegram_message(
