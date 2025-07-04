@@ -80,7 +80,7 @@ btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
 # Заголовки и данные (каждый запуск добавляет новые строки)
-headers = ["Параметры сети", "Курс", "Сложность ", "Общий хешрейт сети, Th"]
+headers = ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th"]
 data_row = [today, str(btc_avg), difficulty, hashrate]
 sheet.append_row(headers)
 sheet.append_row(data_row)
