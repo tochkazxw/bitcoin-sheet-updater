@@ -5,7 +5,6 @@ from googleapiclient.discovery import build
 import requests
 import datetime
 import pytz
-from decimal import Decimal
 import os
 
 # Авторизация
@@ -18,12 +17,13 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
-# Определение первой пустой строки
-def get_first_empty_row(worksheet):
-    str_list = list(filter(None, worksheet.col_values(1)))  # Колонка A
-    return len(str_list) + 1
+# Получение текущей даты по Кишинёву
+def get_today_moldova():
+    tz = pytz.timezone('Europe/Chisinau')
+    now = datetime.datetime.now(tz)
+    return now.strftime("%d.%m.%Y")
 
-# Telegram уведомление
+# Telegram
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -35,12 +35,6 @@ def send_telegram_message(text):
         requests.post(url, data=payload, timeout=10)
     except:
         pass
-
-# Получение текущей даты по Кишинёву
-def get_today_moldova():
-    tz = pytz.timezone('Europe/Chisinau')
-    now = datetime.datetime.now(tz)
-    return now.strftime("%d.%m.%Y")
 
 # Получение курса BTC
 def get_coindesk_price():
@@ -66,43 +60,65 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# Основные значения
+# Поиск первой пустой строки (по колонке A)
+def get_first_empty_row(worksheet):
+    str_list = list(filter(None, worksheet.col_values(1)))
+    return len(str_list) + 1
+
+# === Основной блок ===
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Найти первую пустую строку
-r = get_first_empty_row(sheet)
+r = get_first_empty_row(sheet)  # стартовая строка
 
-# Таблица с формулами
-rows = [
+# 1. Вставка всех строк без формул
+values_block = [
     ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт сети, Th", "Доля привлечённого хешрейта, %"],
     [today, btc_avg, difficulty, hashrate, 0.04],
 
     ["Кол-во майнеров", "Стоковый хешрейт, Th", "Привлечённый хешрейт, Th", "Распределение", "Хешрейт к распределению"],
-    [1000, 150000, f"=B{r+4}+B{r+6}", "2.80%", f"=C{r+4}*D{r+4}"],
+    [1000, 150000, "", "2.80%", ""],
 
     ["Средний хеш на майнер", "Прирост хешрейта, Th", "-", "Партнёр", "Разработчик"],
     [150, 22500, "-", "1.00%", "1.80%"],
 
     ["Коэфф. прироста", "Суммарный хешрейт, Th", "-", "Партнёр хешрейт", "Разработчик хешрейт"],
-    ["15%", f"=C{r+4}", "-", f"=E{r+4}*D{r+8}", f"=E{r+4}*E{r+8}"],
+    ["15%", "", "-", "", ""],
 
     ["Полезный хешрейт, Th", "Доход 30 дней,BTC(Партнёр)", "Доход 30 дней,BTC(Разработчик)"],
-    [f"=B{r+10}*0.9736",
-     f"=(30*86400*3.125*D{r+10}*1000000000000)/(C{r+1}*4294967296)",
-     f"=(30*86400*3.125*E{r+10}*1000000000000)/(C{r+1}*4294967296)"],
+    ["", "", ""],
 
     ["", "Доход 30 дней,USDT(Партнёр)", "Доход 30 дней,USDT(Разработчик)"],
-    ["", f"=B{r+12}*B{r+1}", f"=C{r+12}*B{r+1}"],
+    ["", "", ""],
 ]
 
-# Запись в таблицу одним блоком
-end_row = r + len(rows) - 1
-sheet.update(f"A{r}:E{end_row}", rows)
+sheet.update(f"A{r}:E{r+len(values_block)-1}", values_block)
 
-# Telegram
+# 2. Вставка всех формул вручную через update_acell
+sheet.update_acell(f"C{r+4}", f"=B{r+4}+B{r+6}")                    # Привлечённый хешрейт
+sheet.update_acell(f"E{r+4}", f"=C{r+4}*D{r+4}")                    # Хешрейт к распределению
+
+sheet.update_acell(f"B{r+10}", f"=C{r+4}")                          # Суммарный хешрейт
+sheet.update_acell(f"D{r+10}", f"=E{r+4}*D{r+8}")                   # Партнёр хешрейт
+sheet.update_acell(f"E{r+10}", f"=E{r+4}*E{r+8}")                   # Разработчик хешрейт
+
+sheet.update_acell(f"B{r+12}", f"=B{r+10}*0.9736")                  # Полезный хешрейт
+
+sheet.update_acell(
+    f"C{r+12}",
+    f"=(30*86400*3.125*D{r+10}*1000000000000)/(C{r+1}*4294967296)"  # BTC Партнёр
+)
+sheet.update_acell(
+    f"D{r+12}",
+    f"=(30*86400*3.125*E{r+10}*1000000000000)/(C{r+1}*4294967296)"  # BTC Разработчик
+)
+
+sheet.update_acell(f"C{r+14}", f"=C{r+12}*B{r+1}")                  # USDT партнёр
+sheet.update_acell(f"D{r+14}", f"=D{r+12}*B{r+1}")                  # USDT разработчик
+
+# Telegram сообщение
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
