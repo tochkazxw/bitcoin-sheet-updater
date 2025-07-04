@@ -19,7 +19,7 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
-# Telegram уведомление
+# Функция отправки сообщения в Telegram
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -41,13 +41,13 @@ def send_telegram_message(text):
     except Exception as e:
         print(f"❌ Исключение при отправке Telegram уведомления: {e}")
 
-# Время Молдовы
+# Получить текущую дату в Молдове (дд.мм.гггг)
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
-# API: курс, сложность, хешрейт
+# Получение курса с Coindesk
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -55,6 +55,7 @@ def get_coindesk_price():
     except:
         return None
 
+# Получение курса с Coingecko
 def get_coingecko_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
@@ -62,6 +63,7 @@ def get_coingecko_price():
     except:
         return None
 
+# Получение сложности и хешрейта с blockchain.info
 def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
@@ -70,134 +72,162 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# ====== ДАННЫЕ ======
+# Основная логика
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Тестовые данные
-miners = 1000
-stock_hashrate = 150_000
-attracted_hashrate = 172_500
-distribution = "2.80%"
-share = round((attracted_hashrate / int(hashrate)) * 100, 2) if hashrate != "N/A" else "N/A"
-avg_hashrate_per_miner = round(attracted_hashrate / miners, 2)
-growth = attracted_hashrate - stock_hashrate
-partner = "PartnerX"
-hashrate_to_distribution = f"{attracted_hashrate / 2.80:.2f}"
+# Подписи для первой группы данных
+labels = ["Дата", "Средний курс BTC (USD)", "Сложность", "Общий хешрейт сети, Th"]
 
-# ===== ЗАГОЛОВКИ И ДАННЫЕ =====
-labels = [
-    "Дата",
-    "Количество майнеров",
-    "Средний курс BTC (USD)",
-    "Стоковый хешрейт, Th",
-    "Сложность",
-    "Привлеченный Хешрейт, Th",
-    "Общий хешрейт сети, Th",
-    "Распределение",
-    "Доля привлеченного хешрейта, %",
-    "Средний хешрейт на майнер",
-    "Прирост хешрейта",
-    "Партнер",
-    "Хешрейт к распределению"
-]
+# Добавляем пустую строку для отступа
+sheet.append_row([])
 
-data = [
-    today,
-    miners,
-    btc_avg,
-    stock_hashrate,
-    difficulty,
-    attracted_hashrate,
-    hashrate,
-    distribution,
-    share,
-    avg_hashrate_per_miner,
-    growth,
-    partner,
-    hashrate_to_distribution
-]
+# Добавляем первую группу заголовков и данные в строку
+sheet.append_row(labels)
+sheet.append_row([today, str(btc_avg), difficulty, hashrate])
 
-# ===== ДОБАВЛЯЕМ В ТАБЛИЦУ =====
-sheet.append_rows([[], labels, data])
-
+# Получаем количество строк после добавления
 row_count = len(sheet.get_all_values())
+
+# Индексы добавленных строк (0-based)
+empty_row_index = row_count - 3
 header_row_index = row_count - 2
 data_row_index = row_count - 1
 
-# ===== ФОРМАТИРОВАНИЕ =====
+# Новые данные для второй группы (вертикально под первой)
+miners_count = 1000
+stock_hashrate = 150000
+attracted_hashrate = 172500
+distribution = "2.80%"
+
+additional_labels = [
+    "Количество майнеров",
+    "Стоковый хешрейт, Th",
+    "Привлечённый хешрейт, Th",
+    "Распределение, %"
+]
+
+additional_values = [
+    str(miners_count),
+    str(stock_hashrate),
+    str(attracted_hashrate),
+    distribution
+]
+
+# Формируем запрос batchUpdate для записи второй группы вертикально в столбец A (заголовки) и B (значения)
 requests_body = {
     "requests": [
         {
-            "repeatCell": {
-                "range": {
+            "updateCells": {
+                "rows": [
+                    {"values": [{"userEnteredValue": {"stringValue": additional_labels[0]}}]},
+                    {"values": [{"userEnteredValue": {"stringValue": additional_labels[1]}}]},
+                    {"values": [{"userEnteredValue": {"stringValue": additional_labels[2]}}]},
+                    {"values": [{"userEnteredValue": {"stringValue": additional_labels[3]}}]},
+                ],
+                "fields": "userEnteredValue",
+                "start": {
                     "sheetId": sheet_id,
-                    "startRowIndex": header_row_index,
-                    "endRowIndex": header_row_index + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": len(labels)
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
-                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}, "bold": True}
-                    }
-                },
-                "fields": "userEnteredFormat(backgroundColor,textFormat)"
+                    "rowIndex": data_row_index + 1,  # Начинаем ниже первой группы данных
+                    "columnIndex": 0  # Столбец A
+                }
             }
         },
         {
-            "repeatCell": {
-                "range": {
+            "updateCells": {
+                "rows": [
+                    {"values": [{"userEnteredValue": {"stringValue": additional_values[0]}}]},
+                    {"values": [{"userEnteredValue": {"stringValue": additional_values[1]}}]},
+                    {"values": [{"userEnteredValue": {"stringValue": additional_values[2]}}]},
+                    {"values": [{"userEnteredValue": {"stringValue": additional_values[3]}}]},
+                ],
+                "fields": "userEnteredValue",
+                "start": {
                     "sheetId": sheet_id,
-                    "startRowIndex": data_row_index,
-                    "endRowIndex": data_row_index + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": len(data)
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85},
-                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
-                    }
-                },
-                "fields": "userEnteredFormat(backgroundColor,textFormat)"
-            }
-        },
-        {
-            "updateBorders": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": header_row_index,
-                    "endRowIndex": data_row_index + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": len(data)
-                },
-                "top": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "bottom": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "left": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "right": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "innerHorizontal": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "innerVertical": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}}
+                    "rowIndex": data_row_index + 1,
+                    "columnIndex": 1  # Столбец B
+                }
             }
         }
     ]
 }
 
+# Применяем форматирование для первой группы (как было)
+formatting_requests = [
+    {
+        "repeatCell": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": header_row_index,
+                "endRowIndex": header_row_index + 1,
+                "startColumnIndex": 0,
+                "endColumnIndex": 4
+            },
+            "cell": {
+                "userEnteredFormat": {
+                    "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
+                    "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}, "bold": True}
+                }
+            },
+            "fields": "userEnteredFormat(backgroundColor,textFormat)"
+        }
+    },
+    {
+        "repeatCell": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": data_row_index,
+                "endRowIndex": data_row_index + 1,
+                "startColumnIndex": 0,
+                "endColumnIndex": 4
+            },
+            "cell": {
+                "userEnteredFormat": {
+                    "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85},
+                    "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
+                }
+            },
+            "fields": "userEnteredFormat(backgroundColor,textFormat)"
+        }
+    },
+    {
+        "updateBorders": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": header_row_index,
+                "endRowIndex": data_row_index + 1,
+                "startColumnIndex": 0,
+                "endColumnIndex": 4
+            },
+            "top": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "bottom": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "left": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "right": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "innerHorizontal": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "innerVertical": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}}
+        }
+    }
+]
+
+# Выполняем batchUpdate для данных и форматирования
 service.spreadsheets().batchUpdate(
     spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
-    body=requests_body
+    body={"requests": requests_body["requests"] + formatting_requests}
 ).execute()
 
 print(f"✅ Данные за {today} добавлены и оформлены.")
 
-# Telegram уведомление
+# Отправляем уведомление в Telegram
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
     f"Сложность: {difficulty}\n"
     f"Хешрейт: {hashrate}\n"
-    f"Ссылка: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit"
+    f"Количество майнеров: {miners_count}\n"
+    f"Стоковый хешрейт: {stock_hashrate}\n"
+    f"Привлечённый хешрейт: {attracted_hashrate}\n"
+    f"Распределение: {distribution}\n"
+    f"Ссылка на таблицу: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
 )
