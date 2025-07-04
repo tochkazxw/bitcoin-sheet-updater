@@ -111,10 +111,10 @@ rows = [
     [growth_coefficient, total_hashrate, "-", partner_hashrate, developer_hashrate],
 
     [],
-    ["Полезный хешрейт, Th", "Доход за 30 дней, BTC (Партнёр)", "Доход за 30 дней, BTC (Разработчик)"],
+    ["Полезный хешрейт, Th", "Доход 30 дней,BTC(Партнёр)", "Доход 30 дней,BTC(Разработчик)"],
     [useful_hashrate, partner_btc, dev_btc],
 
-    ["", "Доход за 30 дней, USDT (Партнёр)", "Доход за 30 дней, USDT (Разработчик)"],
+    ["", "Доход 30 дней,USDT(Партнёр)", "Доход 30 дней,USDT(Разработчик)"],
     ["", partner_usdt, dev_usdt],
 ]
 
