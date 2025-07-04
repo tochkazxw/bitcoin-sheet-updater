@@ -11,30 +11,21 @@ import os
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
-
-# Открываем таблицу
 spreadsheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU")
 
-# Лист с заголовками (создай в Google Sheets вручную с таким именем)
-header_sheet = spreadsheet.worksheet("Headers")
+def get_or_create_worksheet(spreadsheet, title, rows=100, cols=20):
+    try:
+        return spreadsheet.worksheet(title)
+    except gspread.exceptions.WorksheetNotFound:
+        return spreadsheet.add_worksheet(title=title, rows=rows, cols=cols)
 
-# Лист для данных (создай в Google Sheets вручную с таким именем)
-data_sheet = spreadsheet.worksheet("Data")
+header_sheet = get_or_create_worksheet(spreadsheet, "Headers")
+data_sheet = get_or_create_worksheet(spreadsheet, "Data")
 
-# Проверка и запись заголовков в лист Headers (выполнится только если пусто)
-def ensure_headers():
-    headers = header_sheet.row_values(1)
-    if not headers or len(headers) < 5:
-        header_rows = [
-            ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"],
-            ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
-            ["Средний хеш на майнер", "Прирост хешрейта", "-", "Партнер", "Разработчик"],
-            ["Коэфф. прироста", "Суммарный хешрейт", "-", "Партнер Хешрейт", "Разработчик Хешрейт"],
-            ["Полезный хешрейт, Th", "", "Доход за 30 дней, USDT", "", ""]
-        ]
-        header_sheet.clear()
-        for i, row in enumerate(header_rows, start=1):
-            header_sheet.insert_row(row, i)
+# Авторизация Google Sheets API для форматирования
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+service = build("sheets", "v4", credentials=credentials)
 
 # Функция отправки сообщения в Telegram
 def send_telegram_message(text):
@@ -89,13 +80,13 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# --- Основные переменные ---
+# Основные переменные
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Дополнительные значения (заполни своими)
+# Дополнительные значения (твой пример)
 miners = 1000
 stock_hashrate = 150000
 attracted_hashrate = 172500
@@ -109,25 +100,26 @@ partner_hashrate = 1725
 developer_hashrate = 3105
 growth_coefficient = "15%"
 total_hashrate = 172500
-earnings_30days_btc = ""  # Можешь вставить значение
-earnings_30days_usdt = "" # Можешь вставить значение
+earnings_30days_btc = ""  # Можно вставить данные, если есть
+earnings_30days_usdt = "" # Можно вставить данные, если есть
 useful_hashrate = 167670
 share_attracted_hashrate = "0.04"
 
-# Проверяем и записываем заголовки в отдельный лист (если еще нет)
-ensure_headers()
-
-# Формируем данные для добавления в лист "Data" — только цифры и значения
-data_rows = [
-    [today, btc_avg, difficulty, hashrate, share_attracted_hashrate],
+# Формируем данные для вставки по строкам
+rows = [
+    ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"],
+    [today, str(btc_avg), difficulty, hashrate, share_attracted_hashrate],
+    ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
     [miners, stock_hashrate, attracted_hashrate, distribution, hashrate_distribution_ratio],
+    ["Средний хеш на майнер", "Прирост хешрейта", "-", "Партнер", "Разработчик"],
     [avg_hashrate_per_miner, hashrate_growth, "-", partner_share, developer_share],
-    [growth_coefficient, total_hashrate, "Доход за 30 дней, BTC", partner_hashrate, developer_hashrate],
-    [useful_hashrate, "", "Доход за 30 дней, USDT", "", ""]
+    ["Коэфф. прироста", "Суммарный хешрейт", "-", partner_hashrate, developer_hashrate],
+    [growth_coefficient, total_hashrate, f"Доход за 30 дней, BTC", "-", "-"],
+    ["Полезный хешрейт, Th", useful_hashrate, "Доход за 30 дней, USDT", "-", "-"]
 ]
 
-# Добавляем данные в лист Data, строки ниже существующих
-for row in data_rows:
+# Добавляем данные (новые строки) в лист "Data" без удаления старых данных
+for row in rows:
     data_sheet.append_row(row)
 
 # Отправляем уведомление в Telegram
