@@ -90,9 +90,6 @@ sheet.append_row([today, str(btc_avg), difficulty, hashrate])
 
 # Получаем количество строк после добавления
 row_count = len(sheet.get_all_values())
-
-# Индексы добавленных строк
-empty_row_index = row_count - 3
 header_row_index = row_count - 2
 data_row_index = row_count - 1
 
@@ -111,10 +108,14 @@ requests_body = {
                 "cell": {
                     "userEnteredFormat": {
                         "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
-                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}, "bold": True}
+                        "textFormat": {
+                            "foregroundColor": {"red": 0, "green": 0, "blue": 0},
+                            "bold": True
+                        },
+                        "horizontalAlignment": "CENTER"
                     }
                 },
-                "fields": "userEnteredFormat(backgroundColor,textFormat)"
+                "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"
             }
         },
         {
