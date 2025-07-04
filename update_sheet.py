@@ -14,7 +14,7 @@ client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 sheet_id = sheet._properties['sheetId']
 
-# Авторизация Google Sheets API
+# Авторизация Google Sheets API для форматирования
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
@@ -41,13 +41,13 @@ def send_telegram_message(text):
     except Exception as e:
         print(f"❌ Исключение при отправке Telegram уведомления: {e}")
 
-# Получить текущую дату
+# Получить текущую дату в Молдове (дд.мм.гггг)
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
-# Получение курса
+# Получение курса с Coindesk
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -55,6 +55,7 @@ def get_coindesk_price():
     except:
         return None
 
+# Получение курса с Coingecko
 def get_coingecko_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
@@ -62,7 +63,7 @@ def get_coingecko_price():
     except:
         return None
 
-# Сложность и хешрейт
+# Получение сложности и хешрейта с blockchain.info
 def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
@@ -71,24 +72,25 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# Получить данные
+# Основная логика
+
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Добавить строки
+# Заголовки и данные (каждый запуск добавляет новые строки)
 headers = ["Параметры сети", "Курс", "Сложность ", "Общий хешрейт сети, Th"]
 data_row = [today, str(btc_avg), difficulty, hashrate]
 sheet.append_row(headers)
 sheet.append_row(data_row)
 
-# Получить диапазон для форматирования
+# Получаем общее количество строк для форматирования
 row_count = len(sheet.get_all_values())
 start = row_count - 2  # индекс заголовка
-end = row_count        # индекс после последней строки
+end = row_count        # индекс строки после данных
 
-# Подготовка запроса для цветного форматирования и границ
+# Запрос на оформление (цвета и границы)
 requests_body = {
     "requests": [
         {
@@ -146,9 +148,9 @@ requests_body = {
     ]
 }
 
-# Отправить изменения оформления
+# Применяем оформление
 service.spreadsheets().batchUpdate(spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU", body=requests_body).execute()
 print(f"✅ Данные за {today} добавлены и оформлены рамками и цветом.")
 
-# Отправить уведомление в Telegram
+# Отправляем уведомление в Telegram
 send_telegram_message(f"✅ Таблица обновлена: {today}, Курс BTC: {btc_avg}, Сложность: {difficulty}, Хешрейт: {hashrate}")
