@@ -72,33 +72,29 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
+# Основная логика
 
-# --- Основная логика ---
-
-# Получаем данные
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Подписи (заголовки параметров)
 labels = ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th"]
-
-# Данные
 data_row = [today, str(btc_avg), difficulty, hashrate]
 
-# Добавляем строки — сначала подписи, потом значения
+# Добавляем подписи, данные и пустую строку для отступа
 sheet.append_row(labels)
 sheet.append_row(data_row)
+sheet.append_row([""] * len(labels))  # пустая строка для отступа
 
-# Получаем текущий размер таблицы (число строк)
+# Получаем текущее количество строк
 row_count = len(sheet.get_all_values())
 
-# Индексы для форматирования последних двух добавленных строк
-start = row_count - 2  # строка с подписью
-end = row_count        # строка с данными
+# Индексы строк для форматирования (подписи и данные)
+start = row_count - 3  # индекс строки с подписями
+end = start + 2        # до строки с данными включительно
 
-# Запрос на оформление: фон + чёрный текст + рамки
+# Форматирование: цвет фона и черный текст для подписи и данных
 requests_body = {
     "requests": [
         {
@@ -114,7 +110,7 @@ requests_body = {
                     "userEnteredFormat": {
                         "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
                         "textFormat": {
-                            "foregroundColor": {"red": 0, "green": 0, "blue": 0},  # Чёрный текст
+                            "foregroundColor": {"red": 0, "green": 0, "blue": 0},
                             "bold": True
                         }
                     }
@@ -135,7 +131,7 @@ requests_body = {
                     "userEnteredFormat": {
                         "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85},
                         "textFormat": {
-                            "foregroundColor": {"red": 0, "green": 0, "blue": 0}  # Чёрный текст
+                            "foregroundColor": {"red": 0, "green": 0, "blue": 0}
                         }
                     }
                 },
@@ -162,10 +158,10 @@ requests_body = {
     ]
 }
 
-# Применяем оформление
 service.spreadsheets().batchUpdate(spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU", body=requests_body).execute()
-
-print(f"✅ Данные за {today} добавлены и оформлены рамками и цветом.")
+print(f"✅ Данные за {today} добавлены и оформлены с отступом и черным шрифтом.")
 
 # Отправляем уведомление в Telegram
-send_telegram_message(f"✅ Таблица обновлена: {today}\nКурс BTC: {btc_avg}\nСложность: {difficulty}\nХешрейт: {hashrate}")
+send_telegram_message(
+    f"✅ Таблица обновлена:\nДата: {today}\nКурс BTC: {btc_avg}\nСложность: {difficulty}\nХешрейт: {hashrate}"
+)
