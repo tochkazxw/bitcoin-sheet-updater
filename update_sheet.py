@@ -3,13 +3,21 @@ from oauth2client.service_account import ServiceAccountCredentials
 import requests
 import datetime
 import pytz
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
 import os
 
 # Авторизация gspread
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
-sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").worksheet("Sheet1")
+sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
+sheet_id = sheet._properties['sheetId']
+
+# Авторизация Google Sheets API для форматирования
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+service = build("sheets", "v4", credentials=credentials)
 
 # Функция отправки сообщения в Telegram
 def send_telegram_message(text):
@@ -64,31 +72,25 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# Проверяем и записываем заголовки, если их нет
-def ensure_headers(sheet):
-    headers = [
-        "Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %",
-        "Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению",
-        "Средний хеш на майнер", "Прирост хешрейта", "-", "Партнер", "Разработчик",
-        "Коэфф. прироста", "Суммарный хешрейт", "-", "Партнер", "Разработчик",
-        "Доход за 30 дней, BTC", "Доход за 30 дней, USDT", "Полезный хешрейт, Th"
-    ]
-    first_row = sheet.row_values(1)
-    if not first_row or len(first_row) < 5 or first_row[0] != "Дата":
-        sheet.insert_row(headers, 1)
+# Основная логика
 
-# Основные переменные
+# Получаем значения
+num_miners = 1000
+stock_hashrate = 150000
+attracted_hashrate = 172500
+distribution = "2.80%"
+
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Дополнительные значения
-miners = 1000
-stock_hashrate = 150000
-attracted_hashrate = 172500
-distribution = "2.80%"
-hashrate_distribution_ratio = 4830
+try:
+    hashrate_float = float(hashrate)
+    attracted_percent = round((attracted_hashrate / hashrate_float) * 100, 2)
+except:
+    attracted_percent = "N/A"
+
 avg_hashrate_per_miner = 150
 hashrate_growth = 22500
 partner_share = "1%"
@@ -97,26 +99,34 @@ partner_hashrate = 1725
 developer_hashrate = 3105
 growth_coefficient = "15%"
 total_hashrate = 172500
-earnings_30days_btc = ""  # можно заполнить реальными значениями
-earnings_30days_usdt = "" # можно заполнить реальными значениями
 useful_hashrate = 167670
-share_attracted_hashrate = "0.04"
 
-# Убедимся, что заголовки есть
-ensure_headers(sheet)
+# Проверяем, есть ли заголовки (в первой строке)
+first_row = sheet.row_values(1)
+expected_headers = [
+    "Дата", "Средний курс BTC (USD)", "Сложность", "Общий хешрейт сети, Th", "Доля привлеченного хешрейта, %",
+    "Количество майнеров", "Стоковый хешрейт, Th", "Привлеченный Хешрейт, Th", "Распределение", "Хешрейт к распределению",
+    "Средний хеш на майнер", "Прирост хешрейта", "-", "Партнер", "Разработчик",
+    "Коэфф. прироста", "Суммарный хешрейт", "-", "Партнер", "Разработчик",
+    "Доход за 30 дней, BTC", "Доход за 30 дней, USDT", "Полезный хешрейт, Th"
+]
 
-# Формируем строку для добавления (пример сгруппировал данные в одну строку — можно менять по желанию)
-row_to_append = [
+if first_row != expected_headers:
+    # Записываем заголовки заново
+    sheet.update('A1:W1', [expected_headers])
+
+# Подготовим данные для одной строки (в строку 2)
+data_row = [
     today,
     str(btc_avg),
     difficulty,
     hashrate,
-    share_attracted_hashrate,
-    miners,
+    str(attracted_percent),
+    num_miners,
     stock_hashrate,
     attracted_hashrate,
     distribution,
-    hashrate_distribution_ratio,
+    4830,  # Хешрейт к распределению, число из твоих примеров
     avg_hashrate_per_miner,
     hashrate_growth,
     "-",
@@ -127,18 +137,21 @@ row_to_append = [
     "-",
     partner_hashrate,
     developer_hashrate,
-    earnings_30days_btc,
-    earnings_30days_usdt,
+    "",  # Доход за 30 дней, BTC - оставляем пустым или вставь нужное
+    "",  # Доход за 30 дней, USDT - оставляем пустым или вставь нужное
     useful_hashrate
 ]
 
-sheet.append_row(row_to_append)
+# Обновляем вторую строку (данные)
+sheet.update('A2:W2', [data_row])
 
-# Отправляем уведомление в Telegram
+print(f"✅ Данные за {today} обновлены в таблице.")
+
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
     f"Сложность: {difficulty}\n"
     f"Хешрейт: {hashrate}\n"
-    f"Ссылка на таблицу: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
+    f"Доля привлеченного хешрейта: {attracted_percent}%\n"
+    f"Ссылка: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
 )
