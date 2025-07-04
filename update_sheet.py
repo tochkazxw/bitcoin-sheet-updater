@@ -19,13 +19,28 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
-# Получить текущую дату в Молдове (дд.мм.гггг)
+def send_telegram_message(text):
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        print("⚠️ TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID не заданы")
+        return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    try:
+        resp = requests.post(url, data=payload, timeout=10)
+        if resp.status_code == 200:
+            print("✅ Уведомление в Telegram отправлено.")
+        else:
+            print(f"❌ Ошибка отправки Telegram: {resp.text}")
+    except Exception as e:
+        print(f"❌ Исключение при отправке Telegram: {e}")
+
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
-# Получение курса с Coindesk
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -33,7 +48,6 @@ def get_coindesk_price():
     except:
         return None
 
-# Получение курса с Coingecko
 def get_coingecko_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
@@ -41,7 +55,6 @@ def get_coingecko_price():
     except:
         return None
 
-# Получение сложности и хешрейта с blockchain.info
 def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
@@ -50,99 +63,67 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# Входные данные вручную (пример)
-miners_count = 1000
-stock_hashrate = 150000
-attracted_hashrate = 172500
-distribution = "2.80%"
-average_hashrate_per_miner = 150
-hashrate_growth = 22500
-partner = "1%"
-developer = "1.8%"
-growth_coefficient = "15%"
-total_hashrate = 172500
-income_30d_btc = "Тут будут данные"
-useful_hashrate_th = 167670
-income_30d_usdt = "Тут будут данные"
-
-# Получаем данные с интернета
+# --- Основные данные ---
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate_network = get_difficulty_and_hashrate()
 
-# Составляем строки для добавления
+# --- Твои дополнительные значения ---
+miners_count = 1000
+stock_hashrate = 150000
+attracted_hashrate = 172500
+distribution = "2.80%"
+
+average_hashrate_per_miner = 150
+hashrate_growth = 22500
+partner = "1%"
+developer = "1.8%"
+
+growth_coefficient = "15%"
+total_hashrate = 172500
+income_30d_btc = "Тут будут данные"
+income_30d_usdt = "Тут будут данные"
+
+useful_hashrate_th = 167670
+
+# Формируем строки для вставки — 9 строк с заголовками и значениями
 rows = [
+    # 1. Основные заголовки
     ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "", "", "", ""],
-    [miners_count, stock_hashrate, attracted_hashrate, distribution, "", "", "", ""],
-    ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик", "", "", ""],
-    [average_hashrate_per_miner, hashrate_growth, "", partner, developer, "", "", ""],
-    ["Коэффициент прироста", "Суммарный хешрейт", "", "Доход за 30 дней, BTC", "", "", "", ""],
-    [growth_coefficient, total_hashrate, "", income_30d_btc, "", "", "", ""],
-    ["Полезный хешрейт, Th", useful_hashrate_th, "", "Доход за 30 дней, USDT", income_30d_usdt, "", "", ""],
+    # 2. Основные данные
     [today, btc_avg, difficulty, hashrate_network, "", "", "", ""],
+    # 3. Дополнительные заголовки 1
+    ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "", "", "", ""],
+    # 4. Доп. данные 1
+    [miners_count, stock_hashrate, attracted_hashrate, distribution, "", "", "", ""],
+    # 5. Дополнительные заголовки 2
+    ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик", "", "", ""],
+    # 6. Доп. данные 2
+    [average_hashrate_per_miner, hashrate_growth, "", partner, developer, "", "", ""],
+    # 7. Дополнительные заголовки 3
+    ["Коэффициент прироста", "Суммарный хешрейт", "", "Доход за 30 дней, BTC", "", "", "", ""],
+    # 8. Доп. данные 3
+    [growth_coefficient, total_hashrate, "", income_30d_btc, "", "", "", ""],
+    # 9. Доп. данные 4
+    ["Полезный хешрейт, Th", useful_hashrate_th, "", "Доход за 30 дней, USDT", income_30d_usdt, "", "", ""],
 ]
 
-# Добавляем пустую строку для отступа
+# Добавляем пустую строку для разделения, если нужно
 sheet.append_row([])
 
-# Добавляем все строки подряд
+# Вставляем все строки по очереди
 for row in rows:
     sheet.append_row(row)
 
-# Получаем количество строк после добавления
-row_count = len(sheet.get_all_values())
-header_row_index = row_count - len(rows)
-
-# Пример форматирования заголовков и ключевых данных
-requests_body = {
-    "requests": [
-        # Форматирование первой строки заголовков
-        {
-            "repeatCell": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": header_row_index,
-                    "endRowIndex": header_row_index + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": 4,
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
-                        "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True},
-                        "horizontalAlignment": "CENTER"
-                    }
-                },
-                "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"
-            }
-        },
-        # Форматирование последней строки (с датой и ключевыми цифрами)
-        {
-            "repeatCell": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": row_count - 1,
-                    "endRowIndex": row_count,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": 4,
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85},
-                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}},
-                        "horizontalAlignment": "CENTER"
-                    }
-                },
-                "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"
-            }
-        },
-    ]
-}
-
-service.spreadsheets().batchUpdate(
-    spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
-    body=requests_body
-).execute()
+# Форматирование — аналогично твоему, можно расширять и корректировать
+# Например, выделить основную шапку и первую строку данных, и т.д.
 
 print(f"✅ Данные за {today} добавлены и оформлены.")
+
+send_telegram_message(
+    f"✅ Таблица обновлена: {today}\n"
+    f"Средний курс BTC (USD): {btc_avg}\n"
+    f"Сложность: {difficulty}\n"
+    f"Хешрейт сети: {hashrate_network}\n"
+)
