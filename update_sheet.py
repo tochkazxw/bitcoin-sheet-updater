@@ -61,66 +61,71 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# Получение строки начала нового блока
-all_rows = sheet.get_all_values()
-start_row = len(all_rows) + 2
-r = start_row  # Стартовая строка
-
-# Получение данных
+# Основные значения
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
-share_attracted = 0.04
+
+# Данные
+num_miners = 1000
+stock_hashrate = 150000
+attracted_hashrate = 172500
 distribution = "2.80%"
+hashrate_distribution_ratio = 4830
+avg_hashrate_per_miner = 150
+hashrate_growth = 22500
 partner_share = "1.00%"
 developer_share = "1.80%"
+partner_hashrate = 1725
+developer_hashrate = 3105
+growth_coefficient = "15%"
+total_hashrate = 172500
+useful_hashrate = 167670
 
-# ✅ Таблица с числами, не строками
-block = [
+share_attracted = 0.04
+
+# Доход BTC и USDT
+partner_btc = "0.02573522"
+dev_btc = "0.04632340"
+partner_usdt = "2702.20"
+dev_usdt = "4863.96"
+
+# Таблица
+rows = [
     ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт сети, Th", "Доля привлечённого хешрейта, %"],
-    [today, btc_avg, difficulty, hashrate, share_attracted],
+    [today, str(btc_avg), difficulty, hashrate, share_attracted],
 
+    [],
     ["Кол-во майнеров", "Стоковый хешрейт, Th", "Привлечённый хешрейт, Th", "Распределение", "Хешрейт к распределению"],
-    [1000, 150000, "", distribution, ""],
+    [num_miners, stock_hashrate, attracted_hashrate, distribution, hashrate_distribution_ratio],
 
+    [],
     ["Средний хеш на майнер", "Прирост хешрейта, Th", "-", "Партнёр", "Разработчик"],
-    [150, 22500, "-", partner_share, developer_share],
+    [avg_hashrate_per_miner, hashrate_growth, "-", partner_share, developer_share],
 
+    [],
     ["Коэфф. прироста", "Суммарный хешрейт, Th", "-", "Партнёр хешрейт", "Разработчик хешрейт"],
-    [0.15, "", "-", "", ""],
+    [growth_coefficient, total_hashrate, "-", partner_hashrate, developer_hashrate],
 
+    [],
     ["Полезный хешрейт, Th", "Доход 30 дней,BTC(Партнёр)", "Доход 30 дней,BTC(Разработчик)"],
-    ["", "", ""],
+    [useful_hashrate, partner_btc, dev_btc],
 
     ["", "Доход 30 дней,USDT(Партнёр)", "Доход 30 дней,USDT(Разработчик)"],
-    ["", "", ""],
+    ["", partner_usdt, dev_usdt],
 ]
 
-# Вставка данных без сдвига
-end_row = start_row + len(block) - 1
-sheet.update(f"A{start_row}:E{end_row}", block)
+# Добавление строк
+sheet.append_row([])
+for row in rows:
+    sheet.append_row(row)
 
-# Формулы
-sheet.update_acell(f"C{r+4}", f"=B{r+4}+B{r+6}")  # Привлечённый хешрейт
-sheet.update_acell(f"E{r+4}", f"=C{r+4}*D{r+4}")  # Хеш к распределению
-
-sheet.update_acell(f"B{r+10}", f"=C{r+4}")        # Суммарный хеш
-sheet.update_acell(f"D{r+10}", f"=E{r+4}*D{r+8}")  # Партнёр хеш
-sheet.update_acell(f"E{r+10}", f"=E{r+4}*E{r+8}")  # Разработчик хеш
-
-sheet.update_acell(f"A{r+12}", f"=B{r+10}*0.9736")  # Полезный хеш
-sheet.update_acell(f"B{r+12}", f"=(30*86400*3.125*D{r+10}*1000000000000)/(C{r+1}*4294967296)")  # BTC партнёр
-sheet.update_acell(f"C{r+12}", f"=(30*86400*3.125*E{r+10}*1000000000000)/(C{r+1}*4294967296)")  # BTC разработчик
-
-sheet.update_acell(f"B{r+14}", f"=B{r+12}*B{r+1}")  # USDT партнёр
-sheet.update_acell(f"C{r+14}", f"=C{r+12}*B{r+1}")  # USDT разработчик
-
-# Telegram уведомление
+# Telegram
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
     f"Сложность: {difficulty}\n"
-    f"Хешрейт: {hashrate} Th/s\n"
+    f"Хешрейт: {hashrate}\n"
     f"Ссылка: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
 )
