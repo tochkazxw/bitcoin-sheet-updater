@@ -19,7 +19,6 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
-# Функция отправки сообщения в Telegram
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -41,13 +40,11 @@ def send_telegram_message(text):
     except Exception as e:
         print(f"❌ Исключение при отправке Telegram уведомления: {e}")
 
-# Получить текущую дату в Молдове (дд.мм.гггг)
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
-# Получение курса с Coindesk
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -55,7 +52,6 @@ def get_coindesk_price():
     except:
         return None
 
-# Получение курса с Coingecko
 def get_coingecko_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
@@ -63,7 +59,6 @@ def get_coingecko_price():
     except:
         return None
 
-# Получение сложности и хешрейта с blockchain.info
 def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
@@ -72,28 +67,40 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# Основная логика
+# Подготовка данных
+
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Подписи для данных
-labels = ["Дата", "Средний курс BTC (USD)", "Сложность", "Общий хешрейт сети, Th"]
+# Новые поля (заглушки для демонстрации)
+num_miners = "10000"  # Кол-во майнеров
+stock_hashrate = "875000"  # TH/s
+attracted_hashrate = "500000"  # TH/s
+distribution = "40%"
+attracted_share = "57.1"
 
-# Добавляем пустую строку для отступа
+# Подписи и значения
+labels = ["Дата", "Средний курс BTC (USD)", "Сложность", "Общий хешрейт сети, Th", "Доля привлеченного хешрейта, %"]
+data = [today, str(btc_avg), difficulty, hashrate, attracted_share]
+
+sub_labels = ["Количество майнеров", "Стоковый хешрейт, Th", "Привлеченный хешрейт, Th", "Распределение"]
+sub_data = [num_miners, stock_hashrate, attracted_hashrate, distribution]
+
 sheet.append_row([])
-
-# Добавляем подписи и данные
 sheet.append_row(labels)
-sheet.append_row([today, str(btc_avg), difficulty, hashrate])
+sheet.append_row(data)
+sheet.append_row(sub_labels)
+sheet.append_row(sub_data)
 
-# Получаем количество строк после добавления
 row_count = len(sheet.get_all_values())
-header_row_index = row_count - 2
-data_row_index = row_count - 1
+empty_row_index = row_count - 5
+header_row_index = row_count - 4
+data_row_index = row_count - 3
+sub_header_index = row_count - 2
+sub_data_index = row_count - 1
 
-# Форматируем добавленные строки (без пустой)
 requests_body = {
     "requests": [
         {
@@ -103,19 +110,15 @@ requests_body = {
                     "startRowIndex": header_row_index,
                     "endRowIndex": header_row_index + 1,
                     "startColumnIndex": 0,
-                    "endColumnIndex": 4
+                    "endColumnIndex": 5
                 },
                 "cell": {
                     "userEnteredFormat": {
                         "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
-                        "textFormat": {
-                            "foregroundColor": {"red": 0, "green": 0, "blue": 0},
-                            "bold": True
-                        },
-                        "horizontalAlignment": "CENTER"
+                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}, "bold": True}
                     }
                 },
-                "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"
+                "fields": "userEnteredFormat(backgroundColor,textFormat)"
             }
         },
         {
@@ -125,7 +128,7 @@ requests_body = {
                     "startRowIndex": data_row_index,
                     "endRowIndex": data_row_index + 1,
                     "startColumnIndex": 0,
-                    "endColumnIndex": 4
+                    "endColumnIndex": 5
                 },
                 "cell": {
                     "userEnteredFormat": {
@@ -141,9 +144,9 @@ requests_body = {
                 "range": {
                     "sheetId": sheet_id,
                     "startRowIndex": header_row_index,
-                    "endRowIndex": data_row_index + 1,
+                    "endRowIndex": sub_data_index + 1,
                     "startColumnIndex": 0,
-                    "endColumnIndex": 4
+                    "endColumnIndex": 5
                 },
                 "top": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
                 "bottom": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
@@ -156,7 +159,6 @@ requests_body = {
     ]
 }
 
-# Применяем форматирование
 service.spreadsheets().batchUpdate(
     spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
     body=requests_body
@@ -164,11 +166,11 @@ service.spreadsheets().batchUpdate(
 
 print(f"✅ Данные за {today} добавлены и оформлены.")
 
-# Отправляем уведомление в Telegram
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
     f"Сложность: {difficulty}\n"
     f"Хешрейт: {hashrate}\n"
+    f"Доля привлеченного хешрейта: {attracted_share}%\n"
     f"Ссылка на таблицу: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
 )
