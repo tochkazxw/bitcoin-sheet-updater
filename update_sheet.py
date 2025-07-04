@@ -67,21 +67,21 @@ prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Очистка лишних пустых строк (опционально)
+# Получение начальной строки
 all_rows = sheet.get_all_values()
 start_row = len(all_rows) + 2
 r = start_row
 
-# Вставка заголовков и значений
+# Вставка данных
 rows = [
     ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт сети, Th", "Доля привлечённого хешрейта, %"],
     [today, btc_avg, difficulty, hashrate, 0.04],
 
     ["Кол-во майнеров", "Стоковый хешрейт, Th", "Привлечённый хешрейт, Th", "Распределение", "Хешрейт к распределению"],
-    [1000, 150000, "", "2.80%", ""],
+    [1000, 150000, "", 0.028, ""],  # Важно: процент как число!
 
     ["Средний хеш на майнер", "Прирост хешрейта, Th", "-", "Партнёр", "Разработчик"],
-    [150, 22500, "-", "1.00%", "1.80%"],
+    [150, 22500, "-", 0.01, 0.018],  # Партнёр и разработчик в виде чисел
 
     ["Коэфф. прироста", "Суммарный хешрейт, Th", "-", "Партнёр хешрейт", "Разработчик хешрейт"],
     ["15%", "", "-", "", ""],
@@ -96,7 +96,7 @@ rows = [
 for i, row in enumerate(rows):
     sheet.insert_row(row, index=r + i)
 
-# Установка формул
+# Формулы
 sheet.update_acell(f"C{r+3}", f"=B{r+3}+B{r+5}")               # Привлечённый хешрейт
 sheet.update_acell(f"E{r+3}", f"=C{r+3}*D{r+3}")               # Хешрейт к распределению
 sheet.update_acell(f"B{r+7}", f"=B{r+3}+B{r+5}")               # Суммарный хешрейт
@@ -109,8 +109,37 @@ sheet.update_acell(f"B{r+9}", f"=3.125*D{r+7}*1E12/(C{r+1}*2^32)")  # BTC пар
 sheet.update_acell(f"C{r+9}", f"=3.125*E{r+7}*1E12/(C{r+1}*2^32)")  # BTC разработчик
 
 # USDT доход
-sheet.update_acell(f"B{r+11}", f"=B{r+9}*B{r+1}")              # USDT партнёр
-sheet.update_acell(f"C{r+11}", f"=C{r+9}*B{r+1}")              # USDT разработчик
+sheet.update_acell(f"B{r+11}", f"=B{r+9}*B{r+1}")
+sheet.update_acell(f"C{r+11}", f"=C{r+9}*B{r+1}")
+
+# Автоформат D{r+3} как процент (распределение)
+service.spreadsheets().batchUpdate(
+    spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
+    body={
+        "requests": [
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": r + 2,
+                        "endRowIndex": r + 3,
+                        "startColumnIndex": 3,
+                        "endColumnIndex": 4,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "numberFormat": {
+                                "type": "PERCENT",
+                                "pattern": "0.00%"
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat.numberFormat"
+                }
+            }
+        ]
+    }
+).execute()
 
 # Telegram
 send_telegram_message(
