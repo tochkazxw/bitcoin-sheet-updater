@@ -63,10 +63,10 @@ def get_difficulty_and_hashrate():
 
 # Получение строки начала нового блока
 all_rows = sheet.get_all_values()
-start_row = len(all_rows) + 2  # отступ от предыдущей таблицы
-r = start_row  # для удобства
+start_row = len(all_rows) + 2
+r = start_row
 
-# Дата и данные
+# Получение данных
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
@@ -76,7 +76,7 @@ distribution = "2.80%"
 partner_share = "1.00%"
 developer_share = "1.80%"
 
-# Табличный шаблон с ячейками под формулы
+# Табличный шаблон
 block = [
     ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт сети, Th", "Доля привлечённого хешрейта, %"],
     [today, btc_avg, difficulty, hashrate, share_attracted],
@@ -96,28 +96,27 @@ block = [
     ["", "", ""],
 ]
 
-# Вставка строк шаблона
+# Вставка строк
 for i, row in enumerate(block):
     sheet.insert_row(row, index=start_row + i)
 
 # Вставка формул
-sheet.update_acell(f"C{r+4}", f"=B{r+4}+B{r+6}")  # Привлечённый хешрейт
-sheet.update_acell(f"B{r+10}", f"=B{r+4}+B{r+6}")  # Суммарный хешрейт
-sheet.update_acell(f"E{r+4}", f"=B{r+10}*D{r+4}")  # Хешрейт к распределению
-sheet.update_acell(f"D{r+10}", f"=E{r+4}*D{r+8}")  # Партнёр хешрейт
-sheet.update_acell(f"E{r+10}", f"=E{r+4}*E{r+8}")  # Разработчик хешрейт
+sheet.update_acell(f"C{r+4}", f"=B{r+4}+B{r+6}")  # привлечённый хешрейт
+sheet.update_acell(f"E{r+4}", f"=C{r+4}*D{r+4}")  # хешрейт к распределению
+sheet.update_acell(f"B{r+10}", f"=C{r+4}")        # суммарный хешрейт
+sheet.update_acell(f"D{r+10}", f"=E{r+4}*D{r+8}")  # хеш партнёр
+sheet.update_acell(f"E{r+10}", f"=E{r+4}*E{r+8}")  # хеш разработчик
+sheet.update_acell(f"A{r+13}", f"=B{r+10}*0.9736")  # полезный хешрейт
+sheet.update_acell(f"B{r+13}", f"=(30*86400*3.125*D{r+10}*1000000000000)/(C{r+1}*4294967296)")  # BTC партнёр
+sheet.update_acell(f"C{r+13}", f"=(30*86400*3.125*E{r+10}*1000000000000)/(C{r+1}*4294967296)")  # BTC разработчик
+sheet.update_acell(f"B{r+15}", f"=B{r+13}*B{r+1}")  # USDT партнёр
+sheet.update_acell(f"C{r+15}", f"=C{r+13}*B{r+1}")  # USDT разработчик
 
-sheet.update_acell(f"A{r+13}", f"=B{r+10}*0.9736")  # Полезный хешрейт (коэф. можно скорректировать)
-sheet.update_acell(f"B{r+13}", f"=(30*86400*3.125*D{r+10}*1000000000000)/(C{r+1}*4294967296)")  # Доход BTC партнёр
-sheet.update_acell(f"C{r+13}", f"=(30*86400*3.125*E{r+10}*1000000000000)/(C{r+1}*4294967296)")  # Доход BTC разраб
-sheet.update_acell(f"B{r+15}", f"=B{r+13}*B{r+1}")  # Доход USDT партнёр
-sheet.update_acell(f"C{r+15}", f"=C{r+13}*B{r+1}")  # Доход USDT разраб
-
-# Telegram-уведомление
+# Telegram
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
     f"Сложность: {difficulty}\n"
-    f"Хешрейт сети: {hashrate} Th/s\n"
+    f"Хешрейт: {hashrate} Th/s\n"
     f"Ссылка: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
 )
