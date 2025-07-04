@@ -83,8 +83,7 @@ growth_coefficient = "15%"
 total_hashrate = 172500
 useful_hashrate = 167670
 
-share_attracted = f"{(attracted_hashrate / float(hashrate)) * 100:.2f}"
-
+share_attracted = 0.04
 
 # Доход BTC и USDT
 partner_btc = "0.02573522"
