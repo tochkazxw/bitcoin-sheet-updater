@@ -2,7 +2,7 @@ name: Update Bitcoin Sheet
 
 on:
   schedule:
-    - cron: '0 7 * * *'   
+    - cron: '5 7 * * *'   
     - cron: '0 15 * * *'  
   workflow_dispatch:       
 
