@@ -13,7 +13,7 @@ creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", sco
 client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 
-# Авторизация Google Sheets API для форматирования (если нужно)
+# Авторизация Google Sheets API (если нужно для форматирования)
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
@@ -96,7 +96,10 @@ earnings_30days_usdt = "" # можно вставить
 useful_hashrate = 167670
 share_attracted_hashrate = "0.04"
 
-# Добавляем строки с заголовками и данными без пустых строк
+# Очистка всего листа
+sheet.clear()
+
+# Добавляем строки с заголовками и данными
 sheet.append_row(["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"])
 sheet.append_row([today, str(btc_avg), difficulty, hashrate, share_attracted_hashrate])
 
