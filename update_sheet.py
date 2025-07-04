@@ -18,6 +18,10 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
+# Получение sheetId
+spreadsheet = service.spreadsheets().get(spreadsheetId=sheet.spreadsheet.id).execute()
+sheet_id = next(s["properties"]["sheetId"] for s in spreadsheet["sheets"] if s["properties"]["title"] == sheet.title)
+
 # Telegram
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -67,12 +71,11 @@ prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Вычисление стартовой строки
+# Стартовая строка
 all_rows = sheet.get_all_values()
-start_row = len(all_rows) + 2
-r = start_row
+r = len(all_rows) + 2  # r — стартовая строка
 
-# Основные строки данных
+# Строки с формулами и числами
 values = [
     ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт сети, Th", "Доля привлечённого хешрейта, %"],
     [today, btc_avg, difficulty, hashrate, 0.04],
@@ -93,28 +96,28 @@ values = [
     ["", f"=B{r+9}*B{r+1}", f"=C{r+9}*B{r+1}"]
 ]
 
-# Вставка данных через Sheets API
+# Вставка значений
 range_str = f"A{r}:E{r + len(values) - 1}"
 service.spreadsheets().values().update(
-    spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
+    spreadsheetId=sheet.spreadsheet.id,
     range=range_str,
     valueInputOption="USER_ENTERED",
     body={"values": values}
 ).execute()
 
-# Применение формата процентов к нужным ячейкам
+# Форматирование процентов
 service.spreadsheets().batchUpdate(
-    spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
+    spreadsheetId=sheet.spreadsheet.id,
     body={
         "requests": [
             {
                 "repeatCell": {
                     "range": {
-                        "sheetId": 0,
+                        "sheetId": sheet_id,
                         "startRowIndex": r + 2,
                         "endRowIndex": r + 3,
                         "startColumnIndex": 3,
-                        "endColumnIndex": 4,
+                        "endColumnIndex": 4
                     },
                     "cell": {
                         "userEnteredFormat": {
@@ -130,11 +133,11 @@ service.spreadsheets().batchUpdate(
             {
                 "repeatCell": {
                     "range": {
-                        "sheetId": 0,
+                        "sheetId": sheet_id,
                         "startRowIndex": r + 4,
                         "endRowIndex": r + 5,
                         "startColumnIndex": 3,
-                        "endColumnIndex": 5,
+                        "endColumnIndex": 5
                     },
                     "cell": {
                         "userEnteredFormat": {
@@ -156,6 +159,6 @@ send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
     f"Сложность: {difficulty}\n"
-    f"Хешрейт: {hashrate}\n"
+    f"Хешрейт: {hashrate} Th/s\n"
     f"Ссылка: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
 )
