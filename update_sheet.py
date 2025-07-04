@@ -37,7 +37,7 @@ def get_today_moldova():
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
-# BTC курс
+# Курс BTC
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -61,58 +61,48 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# Основные данные
+# Данные
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Получение начальной строки
+# Вычисление стартовой строки
 all_rows = sheet.get_all_values()
 start_row = len(all_rows) + 2
 r = start_row
 
-# Вставка данных
-rows = [
+# Основные строки данных
+values = [
     ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт сети, Th", "Доля привлечённого хешрейта, %"],
     [today, btc_avg, difficulty, hashrate, 0.04],
 
     ["Кол-во майнеров", "Стоковый хешрейт, Th", "Привлечённый хешрейт, Th", "Распределение", "Хешрейт к распределению"],
-    [1000, 150000, "", 0.028, ""],  # Важно: процент как число!
+    [1000, 150000, f"=B{r+3}+B{r+5}", 0.028, f"=C{r+3}*D{r+3}"],
 
     ["Средний хеш на майнер", "Прирост хешрейта, Th", "-", "Партнёр", "Разработчик"],
-    [150, 22500, "-", 0.01, 0.018],  # Партнёр и разработчик в виде чисел
+    [150, 22500, "-", 0.01, 0.018],
 
     ["Коэфф. прироста", "Суммарный хешрейт, Th", "-", "Партнёр хешрейт", "Разработчик хешрейт"],
-    ["15%", "", "-", "", ""],
+    ["15%", f"=B{r+3}+B{r+5}", "-", f"=E{r+3}*D{r+5}", f"=E{r+3}*E{r+5}"],
 
     ["Полезный хешрейт, Th", "Доход 30 дней,BTC(Партнёр)", "Доход 30 дней,BTC(Разработчик)"],
-    ["", "", ""],
+    [f"=B{r+7}*0.9736", f"=3.125*D{r+7}*1E12/(C{r+1}*2^32)", f"=3.125*E{r+7}*1E12/(C{r+1}*2^32)"],
 
     ["", "Доход 30 дней,USDT(Партнёр)", "Доход 30 дней,USDT(Разработчик)"],
-    ["", "", ""],
+    ["", f"=B{r+9}*B{r+1}", f"=C{r+9}*B{r+1}"]
 ]
 
-for i, row in enumerate(rows):
-    sheet.insert_row(row, index=r + i)
+# Вставка данных через Sheets API
+range_str = f"A{r}:E{r + len(values) - 1}"
+service.spreadsheets().values().update(
+    spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
+    range=range_str,
+    valueInputOption="USER_ENTERED",
+    body={"values": values}
+).execute()
 
-# Формулы
-sheet.update_acell(f"C{r+3}", f"=B{r+3}+B{r+5}")               # Привлечённый хешрейт
-sheet.update_acell(f"E{r+3}", f"=C{r+3}*D{r+3}")               # Хешрейт к распределению
-sheet.update_acell(f"B{r+7}", f"=B{r+3}+B{r+5}")               # Суммарный хешрейт
-sheet.update_acell(f"D{r+7}", f"=E{r+3}*D{r+5}")               # Партнёр хешрейт
-sheet.update_acell(f"E{r+7}", f"=E{r+3}*E{r+5}")               # Разработчик хешрейт
-sheet.update_acell(f"A{r+9}", f"=B{r+7}*0.9736")               # Полезный хешрейт
-
-# BTC доход
-sheet.update_acell(f"B{r+9}", f"=3.125*D{r+7}*1E12/(C{r+1}*2^32)")  # BTC партнёр
-sheet.update_acell(f"C{r+9}", f"=3.125*E{r+7}*1E12/(C{r+1}*2^32)")  # BTC разработчик
-
-# USDT доход
-sheet.update_acell(f"B{r+11}", f"=B{r+9}*B{r+1}")
-sheet.update_acell(f"C{r+11}", f"=C{r+9}*B{r+1}")
-
-# Автоформат D{r+3} как процент (распределение)
+# Применение формата процентов к нужным ячейкам
 service.spreadsheets().batchUpdate(
     spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
     body={
@@ -125,6 +115,26 @@ service.spreadsheets().batchUpdate(
                         "endRowIndex": r + 3,
                         "startColumnIndex": 3,
                         "endColumnIndex": 4,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "numberFormat": {
+                                "type": "PERCENT",
+                                "pattern": "0.00%"
+                            }
+                        }
+                    },
+                    "fields": "userEnteredFormat.numberFormat"
+                }
+            },
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": 0,
+                        "startRowIndex": r + 4,
+                        "endRowIndex": r + 5,
+                        "startColumnIndex": 3,
+                        "endColumnIndex": 5,
                     },
                     "cell": {
                         "userEnteredFormat": {
