@@ -12,9 +12,8 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
-sheet_id = sheet._properties['sheetId']
 
-# Авторизация Google Sheets API для форматирования
+# Авторизация Google Sheets API для форматирования (если нужно)
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
@@ -24,7 +23,7 @@ def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
-        print("⚠️ Не заданы TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID в переменных окружения.")
+        print("⚠️ TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID не заданы.")
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
@@ -37,11 +36,11 @@ def send_telegram_message(text):
         if resp.status_code == 200:
             print("✅ Уведомление в Telegram отправлено.")
         else:
-            print(f"❌ Ошибка отправки уведомления в Telegram: {resp.text}")
+            print(f"❌ Ошибка отправки Telegram: {resp.text}")
     except Exception as e:
-        print(f"❌ Исключение при отправке Telegram уведомления: {e}")
+        print(f"❌ Исключение при отправке Telegram: {e}")
 
-# Получить текущую дату в Молдове (дд.мм.гггг)
+# Получить текущую дату в Молдове
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
@@ -93,8 +92,9 @@ growth_coefficient = "15%"
 total_hashrate = 172500
 earnings_btc = ""
 earnings_usdt = ""
+useful_hashrate = 167670
 
-# Данные
+# Подготовка данных
 rows = [
     ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт"],
     [today, str(btc_avg), difficulty, hashrate],
@@ -103,18 +103,23 @@ rows = [
     ["Средний хеш на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"],
     [avg_hashrate_per_miner, hashrate_growth, "", partner_share, developer_share],
     ["", "", "", partner_hashrate, developer_hashrate],
-    ["Коэфф. прироста", "Суммарный хешрейт", "Доход за 30 дней, BTC", "", ""],
-    [growth_coefficient, total_hashrate, earnings_btc, "", ""],
-    ["Полезный хешрейт, Th", "", "Доход за 30 дней, USDT", "", ""],
-    ["167670", "", earnings_usdt, "", ""]
+    ["Коэфф. прироста", "Суммарный хешрейт", "", "", ""],
+    [growth_coefficient, total_hashrate, "Доход за 30 дней, BTC", "", ""],
+    ["Полезный хешрейт, Th", useful_hashrate, "Доход за 30 дней, USDT", "", ""],
+    ["", "", "", "", ""]
 ]
 
-# Добавляем строки в таблицу
-sheet.append_row([])  # отступ
+# Очистим лист перед добавлением (если нужно)
+# sheet.clear()
+
+# Добавим пустую строку для отступа, если надо
+sheet.append_row([])
+
+# Добавляем все строки
 for row in rows:
     sheet.append_row(row)
 
-# Telegram-уведомление
+# Отправляем Telegram уведомление
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
