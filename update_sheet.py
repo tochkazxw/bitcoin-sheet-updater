@@ -19,6 +19,7 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
+# Функция отправки сообщения в Telegram
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -40,11 +41,13 @@ def send_telegram_message(text):
     except Exception as e:
         print(f"❌ Исключение при отправке Telegram уведомления: {e}")
 
+# Получить текущую дату в Молдове (дд.мм.гггг)
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
+# Получение курса с Coindesk
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -52,6 +55,7 @@ def get_coindesk_price():
     except:
         return None
 
+# Получение курса с Coingecko
 def get_coingecko_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
@@ -59,6 +63,7 @@ def get_coingecko_price():
     except:
         return None
 
+# Получение сложности и хешрейта с blockchain.info
 def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
@@ -67,39 +72,68 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# Подготовка данных
+# Основная логика
+
+# Получаем значения
+num_miners = 1000
+stock_hashrate = 150000
+attracted_hashrate = 172500
+distribution = "2.80%"
+
+# Получаем данные из API
 
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Новые поля (заглушки для демонстрации)
-num_miners = "10000"  # Кол-во майнеров
-stock_hashrate = "875000"  # TH/s
-attracted_hashrate = "500000"  # TH/s
-distribution = "40%"
-attracted_share = "57.1"
+# Вычисляем долю привлечённого хешрейта
+try:
+    hashrate_float = float(hashrate)
+    attracted_percent = round((attracted_hashrate / hashrate_float) * 100, 2)
+except:
+    attracted_percent = "N/A"
 
-# Подписи и значения
-labels = ["Дата", "Средний курс BTC (USD)", "Сложность", "Общий хешрейт сети, Th", "Доля привлеченного хешрейта, %"]
-data = [today, str(btc_avg), difficulty, hashrate, attracted_share]
-
-sub_labels = ["Количество майнеров", "Стоковый хешрейт, Th", "Привлеченный хешрейт, Th", "Распределение"]
-sub_data = [num_miners, stock_hashrate, attracted_hashrate, distribution]
-
+# Добавляем пустую строку
 sheet.append_row([])
-sheet.append_row(labels)
-sheet.append_row(data)
-sheet.append_row(sub_labels)
-sheet.append_row(sub_data)
 
+# Добавляем заголовки и значения (1 строка)
+sheet.append_row([
+    "Дата",
+    "Средний курс BTC (USD)",
+    "Сложность",
+    "Общий хешрейт сети, Th",
+    "Доля привлеченного хешрейта, %"
+])
+sheet.append_row([
+    today,
+    str(btc_avg),
+    difficulty,
+    hashrate,
+    str(attracted_percent)
+])
+
+# Добавляем вторую строку заголовков и значений
+sheet.append_row([
+    "Количество майнеров",
+    "Стоковый хешрейт, Th",
+    "Привлеченный Хешрейт, Th",
+    "Распределение"
+])
+sheet.append_row([
+    str(num_miners),
+    str(stock_hashrate),
+    str(attracted_hashrate),
+    distribution
+])
+
+# Форматирование
 row_count = len(sheet.get_all_values())
 empty_row_index = row_count - 5
-header_row_index = row_count - 4
-data_row_index = row_count - 3
-sub_header_index = row_count - 2
-sub_data_index = row_count - 1
+header1_index = row_count - 4
+data1_index = row_count - 3
+header2_index = row_count - 2
+data2_index = row_count - 1
 
 requests_body = {
     "requests": [
@@ -107,8 +141,8 @@ requests_body = {
             "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": header_row_index,
-                    "endRowIndex": header_row_index + 1,
+                    "startRowIndex": header1_index,
+                    "endRowIndex": header1_index + 1,
                     "startColumnIndex": 0,
                     "endColumnIndex": 5
                 },
@@ -125,8 +159,8 @@ requests_body = {
             "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": data_row_index,
-                    "endRowIndex": data_row_index + 1,
+                    "startRowIndex": data1_index,
+                    "endRowIndex": data1_index + 1,
                     "startColumnIndex": 0,
                     "endColumnIndex": 5
                 },
@@ -140,20 +174,39 @@ requests_body = {
             }
         },
         {
-            "updateBorders": {
+            "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": header_row_index,
-                    "endRowIndex": sub_data_index + 1,
+                    "startRowIndex": header2_index,
+                    "endRowIndex": header2_index + 1,
                     "startColumnIndex": 0,
-                    "endColumnIndex": 5
+                    "endColumnIndex": 4
                 },
-                "top": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "bottom": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "left": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "right": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "innerHorizontal": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "innerVertical": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}}
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
+                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}, "bold": True}
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat)"
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": data2_index,
+                    "endRowIndex": data2_index + 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 4
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85},
+                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat)"
             }
         }
     ]
@@ -171,6 +224,6 @@ send_telegram_message(
     f"Средний курс BTC (USD): {btc_avg}\n"
     f"Сложность: {difficulty}\n"
     f"Хешрейт: {hashrate}\n"
-    f"Доля привлеченного хешрейта: {attracted_share}%\n"
-    f"Ссылка на таблицу: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
+    f"Доля привлеченного хешрейта: {attracted_percent}%\n"
+    f"Ссылка: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
 )
