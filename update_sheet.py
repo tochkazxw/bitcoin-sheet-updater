@@ -79,16 +79,24 @@ prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not N
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Заголовки и данные (каждый запуск добавляет новые строки)
+# Заголовок таблицы
 headers = ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th"]
+# Данные для вставки
 data_row = [today, str(btc_avg), difficulty, hashrate]
-sheet.append_row(headers)
+
+# Проверяем, есть ли уже заголовок в первой строке (чтобы не дублировать)
+first_row = sheet.row_values(1)
+if first_row != headers:
+    sheet.insert_row(headers, index=1)
+    print("📝 Заголовок добавлен.")
+
+# Добавляем данные в конец таблицы (после последней заполненной строки)
 sheet.append_row(data_row)
 
 # Получаем общее количество строк для форматирования
 row_count = len(sheet.get_all_values())
-start = row_count - 2  # индекс заголовка
-end = row_count        # индекс строки после данных
+start = row_count - 1  # индекс строки с новыми данными (append_row добавляет в конец)
+end = row_count        # следующий индекс
 
 # Запрос на оформление (цвета и границы)
 requests_body = {
@@ -104,24 +112,6 @@ requests_body = {
                 },
                 "cell": {
                     "userEnteredFormat": {
-                        "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
-                        "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True}
-                    }
-                },
-                "fields": "userEnteredFormat(backgroundColor,textFormat)"
-            }
-        },
-        {
-            "repeatCell": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": start + 1,
-                    "endRowIndex": start + 2,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": 4
-                },
-                "cell": {
-                    "userEnteredFormat": {
                         "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85}
                     }
                 },
@@ -132,8 +122,8 @@ requests_body = {
             "updateBorders": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": 0,
-                    "endRowIndex": row_count,
+                    "startRowIndex": start,
+                    "endRowIndex": start + 1,
                     "startColumnIndex": 0,
                     "endColumnIndex": 4
                 },
@@ -148,9 +138,9 @@ requests_body = {
     ]
 }
 
-# Применяем оформление
-service.spreadsheets().batchUpdate(spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU", body=requests_body).execute()
-print(f"✅ Данные за {today} добавлены и оформлены рамками и цветом.")
+# Применяем оформление к новой строке с данными
+service.spreadsheets().batchUpdate(spreadsheetId=sheet.spreadsheet.id, body=requests_body).execute()
+print(f"✅ Данные за {today} добавлены и оформлены.")
 
 # Отправляем уведомление в Telegram
 send_telegram_message(f"✅ Таблица обновлена: {today}, Курс BTC: {btc_avg}, Сложность: {difficulty}, Хешрейт: {hashrate}")
