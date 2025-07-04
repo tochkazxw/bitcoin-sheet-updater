@@ -23,6 +23,7 @@ spreadsheet = service.spreadsheets().get(spreadsheetId=sheet.spreadsheet.id).exe
 sheet_id = next(s["properties"]["sheetId"] for s in spreadsheet["sheets"] if s["properties"]["title"] == sheet.title)
 
 # Telegram
+
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -36,12 +37,14 @@ def send_telegram_message(text):
         pass
 
 # Дата
+
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
 # Курс BTC
+
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -57,6 +60,7 @@ def get_coingecko_price():
         return None
 
 # Сложность и хешрейт
+
 def get_difficulty_and_hashrate():
     try:
         difficulty = requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text
@@ -73,24 +77,23 @@ difficulty, hashrate = get_difficulty_and_hashrate()
 
 # Стартовая строка
 all_rows = sheet.get_all_values()
-r = len(all_rows) + 1
+r = len(all_rows) + 2
 
-# Формулы и значения
+# Формулы и данные
 values = [
-    ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th", "Доля привлеченного хешрейта"],
-    [today, btc_avg, difficulty, hashrate, "=0.028"],
+    ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th", "Доля привлеченного хешрейта, %"],
+    [today, btc_avg, difficulty, hashrate, 0.04],
 
     ["Количество майнеров", "Стоковый хешрейт", "Прирост хешрейта", "Распределение", "Хеш к распределению"],
-    ["=1000", "=A4*A6", "=B6*A8", "=0.028", "=C6*D6"],
+    ["=1000", "=A5*A7", "=B5*A9", 0.028, "=C5*E5"],
 
-    ["Средний хеш на майнер", "Суммарный хешрейт", "Полезный хешрейт", "Партнер", "Разработчик"],
-    ["=150", "=B6+C6", "=B8 - (B8 * D6)", "=0.01", "=0.018"],
+    ["Средний хеш на майнер", "Суммарный хешрейт", "Полезный хеш", "Партнер", "Разработчик"],
+    ["=150", "=B5+C5", "=B6-B6*D5", 0.01, 0.018],
 
-    ["Коэффициент прироста", "Партнерский хеш", "Разработческий хеш", "Доход BTC (Партнер)", "Доход BTC (Разработчик)"],
-    ["=0.15", "=C6*D8", "=C6*E8", "=(30*86400*3.125*B10*1E12)/(C2*4294967296)", "=(30*86400*3.125*C10*1E12)/(C2*4294967296)"],
+    ["Коэф. прироста", "Партнерский хеш", "Разработческий хеш", "Доход BTC (Партнер)", "Доход BTC (Разработчик)"],
+    ["=15%", "=C5*D7", "=C5*E7", "=(30*86400*3.125*B8*1E12)/(C2*4294967296)", "=(30*86400*3.125*C8*1E12)/(C2*4294967296)"],
 
-    ["", "", "", "Доход USDT (Партнер)", "Доход USDT (Разработчик)"],
-    ["", "", "", "=D11*B2", "=E11*B2"]
+    ["", "Доход USDT (Партнер)", "Доход USDT (Разработчик)", "=B9*B2", "=C9*B2"]
 ]
 
 # Вставка значений в Google Sheets
@@ -102,7 +105,7 @@ service.spreadsheets().values().update(
     body={"values": values}
 ).execute()
 
-# Telegram
+# Telegram уведомление
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
