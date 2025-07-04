@@ -12,12 +12,8 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
-spreadsheet_id = "1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU"
 
-# Получаем название листа
-sheet_title = sheet.title
-
-# Авторизация Google Sheets API для форматирования и обновления
+# Авторизация Google Sheets API для форматирования (если нужно)
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
@@ -81,7 +77,7 @@ prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not N
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Дополнительные значения
+# Дополнительные значения (твои)
 miners = 1000
 stock_hashrate = 150000
 attracted_hashrate = 172500
@@ -95,51 +91,32 @@ partner_hashrate = 1725
 developer_hashrate = 3105
 growth_coefficient = "15%"
 total_hashrate = 172500
+earnings_30days_btc = ""  # можно вставить
+earnings_30days_usdt = "" # можно вставить
 useful_hashrate = 167670
 share_attracted_hashrate = "0.04"
 
-# Формируем данные для вставки по строкам
-rows = [
-    ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"],
-    [today, str(btc_avg), difficulty, hashrate, share_attracted_hashrate],
-    ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
-    [miners, stock_hashrate, attracted_hashrate, distribution, hashrate_distribution_ratio],
-    ["Средний хеш на майнер", "Прирост хешрейта", "-", "Партнер", "Разработчик"],
-    [avg_hashrate_per_miner, hashrate_growth, "-", partner_share, developer_share],
-    ["Коэфф. прироста", "Суммарный хешрейт", "-", partner_hashrate, developer_hashrate],
-    [growth_coefficient, total_hashrate, "Доход за 30 дней, BTC", "-", "-"],
-    ["Полезный хешрейт, Th", useful_hashrate, "Доход за 30 дней, USDT", "-", "-"]
-]
-
-# Добавляем пустую строку для разделения
+# Добавляем пустую строку для визуального разделения блоков
 sheet.append_row([])
 
-# Добавляем строки в таблицу
-for row in rows:
-    sheet.append_row(row)
+# Добавляем первый блок с заголовками и данными
+sheet.append_row(["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"])
+sheet.append_row([today, str(btc_avg), difficulty, hashrate, share_attracted_hashrate])
 
-# Вставляем формулы в нужные ячейки
-formula_30days_btc = '=(30*86400*3.125*E22*1000000000000)/(D17*4294967296)'
-formula_30days_usdt = '=E23*C17'
+# Второй блок
+sheet.append_row(["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"])
+sheet.append_row([miners, stock_hashrate, attracted_hashrate, distribution, hashrate_distribution_ratio])
 
-batch_update_body = {
-    "valueInputOption": "USER_ENTERED",
-    "data": [
-        {
-            "range": f"{sheet_title}!C8",
-            "values": [[formula_30days_btc]],
-        },
-        {
-            "range": f"{sheet_title}!C9",
-            "values": [[formula_30days_usdt]],
-        },
-    ],
-}
+# Третий блок
+sheet.append_row(["Средний хеш на майнер", "Прирост хешрейта", "-", "Партнер", "Разработчик"])
+sheet.append_row([avg_hashrate_per_miner, hashrate_growth, "-", partner_share, developer_share])
 
-service.spreadsheets().values().batchUpdate(
-    spreadsheetId=spreadsheet_id,
-    body=batch_update_body
-).execute()
+# Четвёртый блок
+sheet.append_row(["Коэфф. прироста", "Суммарный хешрейт", "-", partner_hashrate, developer_hashrate])
+sheet.append_row([growth_coefficient, total_hashrate, "Доход за 30 дней, BTC", "-", "-"])
+
+# Пятый блок
+sheet.append_row(["Полезный хешрейт, Th", useful_hashrate, "Доход за 30 дней, USDT", "-", "-"])
 
 # Отправляем уведомление в Telegram
 send_telegram_message(
