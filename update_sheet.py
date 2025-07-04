@@ -1,4 +1,4 @@
-import gspread
+""import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import requests
 import datetime
@@ -75,25 +75,25 @@ difficulty, hashrate = get_difficulty_and_hashrate()
 all_rows = sheet.get_all_values()
 r = len(all_rows) + 2
 
-# Формулы (корректные и с процентами)
+# Формулы
 values = [
     ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт сети, Th", "Доля привлечённого хешрейта, %"],
     [today, btc_avg, difficulty, hashrate, "=4%"],
 
-    ["Кол-во майнеров", "Стоковый хешрейт, Th", "Привлечённый хешрейт, Th", "Распределение", "Хешрейт к распределению"],
-    ["1000", "150000", f"=B{r+3}*E{r+1}", "=2,8%", f"=C{r+3}*D{r+3}"],
+    ["Кол-во майнеров", "Стоковый хешрейт, Th", "Прирост хешрейта, Th", "Распределение", "Хешрейт к распределению"],
+    ["=1000", "=A4*A6", "=B4*A8", "=2,8%", "=C4*D4"],
 
-    ["Средний хеш на майнер", "Прирост хешрейта, Th", "-", "Партнёр", "Разработчик"],
-    [f"=B{r+3}/A{r+3}", f"=C{r+3}-B{r+3}", "-", "=1%", "=1,8%"],
+    ["Средний хеш на майнер", "-", "-", "Партнёр", "Разработчик"],
+    ["=B4/A4", "-", "-", "=1%", "=1,8%"],
 
-    ["Коэфф. прироста", "Суммарный хешрейт, Th", "-", "Партнёр хешрейт", "Разработчик хешрейт"],
-    [f"=(B{r+5}-B{r+3})/B{r+3}", f"=B{r+3}+B{r+5}", "-", f"=E{r+3}*D{r+5}", f"=E{r+3}*E{r+5}"],
+    ["Суммарный хешрейт", "Полезный хешрейт", "Привлечённый хешрейт", "Партнёр хешрейт", "Разработчик хешрейт"],
+    ["=B4+B6", "=B8-B8*D4", "=B4+B6", "=C4*D6", "=C4*E6"],
 
-    ["Полезный хешрейт, Th", "Доход 30 дней,BTC(Партнёр)", "Доход 30 дней,BTC(Разработчик)"],
-    [f"=B{r+7}*0,9736", f"=3,125*D{r+7}*1E12/(C{r+1}*2^32)", f"=3,125*E{r+7}*1E12/(C{r+1}*2^32)"],
+    ["", "Доход 30 дней,BTC(Партнёр)", "Доход 30 дней,BTC(Разработчик)", "", ""],
+    ["", "=(30*86400*3,125*D7*1E12)/(C2*2^32)", "=(30*86400*3,125*E7*1E12)/(C2*2^32)", "", ""],
 
-    ["", "Доход 30 дней,USDT(Партнёр)", "Доход 30 дней,USDT(Разработчик)"],
-    ["", f"=B{r+9}*B{r+1}", f"=C{r+9}*B{r+1}"]
+    ["", "Доход 30 дней,USDT(Партнёр)", "Доход 30 дней,USDT(Разработчик)", "", ""],
+    ["", "=D8*B2", "=E8*B2", "", ""]
 ]
 
 # Вставка значений
@@ -104,33 +104,6 @@ service.spreadsheets().values().update(
     valueInputOption="USER_ENTERED",
     body={"values": values}
 ).execute()
-
-# Применение процентного формата для нужных ячеек
-format_request = {
-    "requests": [
-        {
-            "repeatCell": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": r - 1,
-                    "endRowIndex": r - 1 + len(values),
-                    "startColumnIndex": 3,
-                    "endColumnIndex": 5
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "numberFormat": {
-                            "type": "PERCENT",
-                            "pattern": "0.00%"
-                        }
-                    }
-                },
-                "fields": "userEnteredFormat.numberFormat"
-            }
-        }
-    ]
-}
-service.spreadsheets().batchUpdate(spreadsheetId=sheet.spreadsheet.id, body=format_request).execute()
 
 # Telegram
 send_telegram_message(
