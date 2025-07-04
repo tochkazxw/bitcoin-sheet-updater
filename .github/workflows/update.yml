@@ -2,9 +2,8 @@ name: Update Bitcoin Sheet
 
 on:
   schedule:
-    - cron: '38 7 * * *'   
-    - cron: '0 15 * * *'  
-  workflow_dispatch:       
+    - cron: '*/5 * * * *'  # Каждые 5 минут
+  workflow_dispatch:        # Можно запускать вручную
 
 jobs:
   update-sheet:
