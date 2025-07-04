@@ -1,12 +1,12 @@
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 import requests
 import datetime
 import pytz
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-import os
 from decimal import Decimal
+import os
 
 # Авторизация
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -18,7 +18,7 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
-# Telegram
+# Telegram уведомление
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -31,13 +31,13 @@ def send_telegram_message(text):
     except:
         pass
 
-# Время и дата
+# Получение текущей даты по Кишинёву
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
-# Курс BTC
+# Получение курса BTC
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -52,7 +52,7 @@ def get_coingecko_price():
     except:
         return None
 
-# Сложность и хешрейт
+# Получение сложности и хешрейта
 def get_difficulty_and_hashrate():
     try:
         difficulty = requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text
@@ -61,34 +61,30 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# Получение значений
+# Сбор всех данных
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Стартовая строка
+# Найти первую пустую строку (отступ 2 строки)
 start_row = len(sheet.get_all_values()) + 2
 r = start_row
 
-# Формулы вместо значений
+# Формулы и данные
 rows = [
     ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт сети, Th", "Доля привлечённого хешрейта, %"],
     [today, btc_avg, difficulty, hashrate, 0.04],
 
-    [],
     ["Кол-во майнеров", "Стоковый хешрейт, Th", "Привлечённый хешрейт, Th", "Распределение", "Хешрейт к распределению"],
     [1000, 150000, f"=B{r+4}+B{r+6}", "2.80%", f"=C{r+4}*D{r+4}"],
 
-    [],
     ["Средний хеш на майнер", "Прирост хешрейта, Th", "-", "Партнёр", "Разработчик"],
     [150, 22500, "-", "1.00%", "1.80%"],
 
-    [],
     ["Коэфф. прироста", "Суммарный хешрейт, Th", "-", "Партнёр хешрейт", "Разработчик хешрейт"],
     ["15%", f"=C{r+4}", "-", f"=E{r+4}*D{r+8}", f"=E{r+4}*E{r+8}"],
 
-    [],
     ["Полезный хешрейт, Th", "Доход 30 дней,BTC(Партнёр)", "Доход 30 дней,BTC(Разработчик)"],
     [f"=B{r+10}*0.9736",
      f"=(30*86400*3.125*D{r+10}*1000000000000)/(C{r+1}*4294967296)",
@@ -98,14 +94,11 @@ rows = [
     ["", f"=B{r+12}*B{r+1}", f"=C{r+12}*B{r+1}"],
 ]
 
-# Удалим пустые строки
-rows = [row for row in rows if row]
-
-# Массовая вставка
+# Обновление таблицы одним блоком
 end_row = r + len(rows) - 1
 sheet.update(f"A{r}:E{end_row}", rows)
 
-# Telegram
+# Telegram уведомление
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
