@@ -83,10 +83,8 @@ growth_coefficient = "15%"
 total_hashrate = 172500
 useful_hashrate = 167670
 
-try:
-    share_attracted = f"{(attracted_hashrate / float(hashrate)) * 100:.2f}"
-except:
-    share_attracted = "N/A"
+share_attracted = f"{(attracted_hashrate / float(hashrate)) * 100:.2f}"
+
 
 # Доход BTC и USDT
 partner_btc = "0.02573522"
