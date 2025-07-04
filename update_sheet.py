@@ -14,7 +14,7 @@ client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 sheet_id = sheet._properties['sheetId']
 
-# Авторизация Google Sheets API
+# Авторизация Google Sheets API для форматирования
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
@@ -24,26 +24,30 @@ def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
-        print("⚠️ TELEGRAM_BOT_TOKEN или CHAT_ID не указаны.")
+        print("⚠️ Не заданы TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID в переменных окружения.")
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
     try:
         resp = requests.post(url, data=payload, timeout=10)
         if resp.status_code == 200:
-            print("✅ Telegram отправлено.")
+            print("✅ Уведомление в Telegram отправлено.")
         else:
-            print(f"❌ Ошибка Telegram: {resp.text}")
+            print(f"❌ Ошибка отправки уведомления в Telegram: {resp.text}")
     except Exception as e:
-        print(f"❌ Telegram исключение: {e}")
+        print(f"❌ Исключение при отправке Telegram уведомления: {e}")
 
-# Текущая дата
+# Время Молдовы
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
-# Источники данных
+# API: курс, сложность, хешрейт
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -66,51 +70,64 @@ def get_difficulty_and_hashrate():
     except:
         return "N/A", "N/A"
 
-# Подготовка данных
+# ====== ДАННЫЕ ======
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Новые значения
+# Тестовые данные
 miners = 1000
-stock_hashrate = 150000
-attracted_hashrate = 172500
-distribution_percent = 2.80
-avg_hash_per_miner = round(attracted_hashrate / miners, 2)
-growth_hash = attracted_hashrate - stock_hashrate
-partner_name = "Партнёр A"
-hash_to_distribution = round(attracted_hashrate / (distribution_percent / 100), 2)
+stock_hashrate = 150_000
+attracted_hashrate = 172_500
+distribution = "2.80%"
+share = round((attracted_hashrate / int(hashrate)) * 100, 2) if hashrate != "N/A" else "N/A"
+avg_hashrate_per_miner = round(attracted_hashrate / miners, 2)
+growth = attracted_hashrate - stock_hashrate
+partner = "PartnerX"
+hashrate_to_distribution = f"{attracted_hashrate / 2.80:.2f}"
 
-# Список строк
+# ===== ЗАГОЛОВКИ И ДАННЫЕ =====
 labels = [
-    "Дата", "Средний курс BTC (USD)", "Сложность", "Общий хешрейт сети, Th",
-    "Количество майнеров", "Стоковый хешрейт, Th", "Привлечённый хешрейт, Th",
-    "Распределение", "Доля привлечённого хешрейта, %",
-    "Средний хешрейт на майнер, Th", "Прирост хешрейта, Th",
-    "Партнёр", "Хешрейт к распределению, Th"
+    "Дата",
+    "Количество майнеров",
+    "Средний курс BTC (USD)",
+    "Стоковый хешрейт, Th",
+    "Сложность",
+    "Привлеченный Хешрейт, Th",
+    "Общий хешрейт сети, Th",
+    "Распределение",
+    "Доля привлеченного хешрейта, %",
+    "Средний хешрейт на майнер",
+    "Прирост хешрейта",
+    "Партнер",
+    "Хешрейт к распределению"
 ]
 
 data = [
-    today, str(btc_avg), difficulty, hashrate,
-    str(miners), str(stock_hashrate), str(attracted_hashrate),
-    f"{distribution_percent}%", "",  # распределение — 8 строка, доля — 9
-    str(avg_hash_per_miner), str(growth_hash),
-    partner_name, str(hash_to_distribution)
+    today,
+    miners,
+    btc_avg,
+    stock_hashrate,
+    difficulty,
+    attracted_hashrate,
+    hashrate,
+    distribution,
+    share,
+    avg_hashrate_per_miner,
+    growth,
+    partner,
+    hashrate_to_distribution
 ]
 
-# Добавляем пустую строку и данные
-sheet.append_row([])
-sheet.append_row(labels)
-sheet.append_row(data)
+# ===== ДОБАВЛЯЕМ В ТАБЛИЦУ =====
+sheet.append_rows([[], labels, data])
 
-# Индексы строк
 row_count = len(sheet.get_all_values())
-empty_row_index = row_count - 3
 header_row_index = row_count - 2
 data_row_index = row_count - 1
 
-# Форматирование
+# ===== ФОРМАТИРОВАНИЕ =====
 requests_body = {
     "requests": [
         {
@@ -138,7 +155,7 @@ requests_body = {
                     "startRowIndex": data_row_index,
                     "endRowIndex": data_row_index + 1,
                     "startColumnIndex": 0,
-                    "endColumnIndex": len(labels)
+                    "endColumnIndex": len(data)
                 },
                 "cell": {
                     "userEnteredFormat": {
@@ -156,7 +173,7 @@ requests_body = {
                     "startRowIndex": header_row_index,
                     "endRowIndex": data_row_index + 1,
                     "startColumnIndex": 0,
-                    "endColumnIndex": len(labels)
+                    "endColumnIndex": len(data)
                 },
                 "top": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
                 "bottom": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
@@ -169,18 +186,18 @@ requests_body = {
     ]
 }
 
-# Применяем формат
 service.spreadsheets().batchUpdate(
     spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
     body=requests_body
 ).execute()
 
-# Telegram
+print(f"✅ Данные за {today} добавлены и оформлены.")
+
+# Telegram уведомление
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
     f"Сложность: {difficulty}\n"
     f"Хешрейт: {hashrate}\n"
-    f"Майнеров: {miners}, Привлечённый хешрейт: {attracted_hashrate}, Распределение: {distribution_percent}%\n"
-    f"https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
+    f"Ссылка: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit"
 )
