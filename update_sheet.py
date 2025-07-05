@@ -13,7 +13,7 @@ creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", sco
 client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 
-# Авторизация Google Sheets API
+# Авторизация Google Sheets API (если нужно форматирование)
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
@@ -79,11 +79,11 @@ def get_btc_price():
     print("Не удалось получить курс BTC с всех источников.")
     return None
 
-# Получение сложности и хешрейта из blockchain.info
+# Получение сложности и хешрейта из blockchain.info (без округлений, как есть)
 def get_difficulty_and_hashrate():
     try:
         diff = requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text.strip()
-        hashrate = requests.get("https://blockchain.info/q/hashrate", timeout=10).text.strip()
+        hashrate = requests.get("https://blockchain.info/q/hashrate", timeout=10).text.strip()  # В хешах в секунду
         return diff, hashrate
     except Exception as e:
         print(f"Ошибка получения сложности и хешрейта: {e}")
@@ -96,15 +96,20 @@ try:
         btc_price = "N/A"
     difficulty, hashrate = get_difficulty_and_hashrate()
 
-    # Примерные хешрейты для расчётов
+    # Конвертация общего хешрейта из хешей в секунду (hashrate) в TH/s
+    try:
+        total_hashrate_th = int(hashrate) / 1_000_000_000_000  # конвертация в TeraHash/s
+    except:
+        total_hashrate_th = "N/A"
+
+    # Примерные значения для хешрейта и других параметров, как у тебя было
     stock_hashrate = 150000
     attracted_hashrate = 172500
-    total_hashrate = stock_hashrate + attracted_hashrate
-    attracted_share_percent = round(attracted_hashrate / total_hashrate * 100, 2)
+    attracted_share_percent = round(attracted_hashrate / (stock_hashrate + attracted_hashrate) * 100, 2)
 
     values = [
-        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"],
-        [today, btc_price, difficulty, total_hashrate, attracted_share_percent],
+        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт (Th/s)", "Доля привлеченного хешрейта, %"],
+        [today, btc_price, difficulty, total_hashrate_th, attracted_share_percent],
 
         ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
         [1000, stock_hashrate, attracted_hashrate, "2.80%", 4830],
@@ -118,13 +123,14 @@ try:
         ["Полезный хешрейт, Th", 167670, "Доход за 30 дней, USDT", 2702.2, 4863.96]
     ]
 
+    # Добавляем строки в конец таблицы (не затирая старые)
     sheet.append_rows(values, value_input_option="USER_ENTERED")
 
     send_telegram_message(
         f"✅ Таблица обновлена: {today}\n"
         f"Средний курс BTC: {btc_price}\n"
         f"Сложность: {difficulty}\n"
-        f"Хешрейт: {total_hashrate} Th/s\n"
+        f"Общий хешрейт: {total_hashrate_th} Th/s\n"
         f"<a href='https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit'>Ссылка на таблицу</a>"
     )
     print("✅ Обновление завершено.")
