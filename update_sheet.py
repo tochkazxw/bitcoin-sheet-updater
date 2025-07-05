@@ -3,15 +3,22 @@ from oauth2client.service_account import ServiceAccountCredentials
 import requests
 import datetime
 import pytz
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
 import os
 
-# Авторизация
+# Авторизация gspread
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 
-# Функция Telegram (как у тебя)
+# Авторизация Google Sheets API (если нужно форматирование — пока не используется)
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+service = build("sheets", "v4", credentials=credentials)
+
+# Функция отправки Telegram-уведомления
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -29,12 +36,12 @@ def send_telegram_message(text):
     except Exception as e:
         print(f"❌ Telegram исключение: {e}")
 
-# Получение даты в Молдове
+# Получение даты в часовом поясе Молдовы
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     return datetime.datetime.now(tz).strftime("%d.%m.%Y")
 
-# Получение курса BTC с CoinDesk и CoinGecko
+# Курс с CoinDesk
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -42,6 +49,7 @@ def get_coindesk_price():
     except:
         return None
 
+# Курс с CoinGecko
 def get_coingecko_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
@@ -49,38 +57,33 @@ def get_coingecko_price():
     except:
         return None
 
-# Получение сложности
-def get_difficulty():
+# Сложность и хешрейт из blockchain.info с переводом хешрейта в Th/s
+def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
-        return round(diff, 2)
+        hashrate_raw = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
+        hashrate_th = round(hashrate_raw / 1e12, 2)  # перевод в Th/s
+        return f"{diff:.2E}", hashrate_th
     except:
-        return "N/A"
+        return "N/A", "N/A"
 
-# Получение общего хешрейта с blockchain.info (Th/s)
-def get_hashrate():
-    try:
-        hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
-        # возвращаем в Th/s (дано в H/s), делим на 1e12
-        return round(hashrate / 1e12, 2)
-    except:
-        return "N/A"
-
+# Основная логика
 try:
     today = get_today_moldova()
     prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
     btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
-    difficulty = get_difficulty()
-    total_hashrate = get_hashrate()  # теперь хешрейт из сети!
+    difficulty, hashrate = get_difficulty_and_hashrate()
 
-    # Твои данные без изменений
+    # Стоковый и привлечённый хешрейты — если хочешь менять, правь здесь
     stock_hashrate = 150000
     attracted_hashrate = 172500
-    attracted_share_percent = round(attracted_hashrate / (stock_hashrate + attracted_hashrate) * 100, 2)
+    total_hashrate = stock_hashrate + attracted_hashrate
+    attracted_share_percent = round(attracted_hashrate / total_hashrate * 100, 2)
 
-    new_rows = [
-        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"],
-        [today, btc_avg, difficulty, total_hashrate, attracted_share_percent],
+    # Данные в таблицу
+    values = [
+        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт, Th", "Доля привлеченного хешрейта, %"],
+        [today, btc_avg, difficulty, hashrate, attracted_share_percent],
 
         ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
         [1000, stock_hashrate, attracted_hashrate, "2.80%", 4830],
@@ -94,18 +97,15 @@ try:
         ["Полезный хешрейт, Th", 167670, "Доход за 30 дней, USDT", 2702.2, 4863.96]
     ]
 
-    # Ищем первую пустую строку для вставки
-    next_row = len(sheet.get_all_values()) + 1
-    start_cell = f"A{next_row}"
+    # Добавляем данные в конец таблицы (не затирая старые)
+    sheet.append_rows(values)
 
-    # Вставляем новые данные начиная с колонки A и первой пустой строки
-    sheet.update(start_cell, new_rows, value_input_option="USER_ENTERED")
-
+    # Telegram уведомление
     send_telegram_message(
         f"✅ Таблица обновлена: {today}\n"
         f"Средний курс BTC: {btc_avg}\n"
         f"Сложность: {difficulty}\n"
-        f"Хешрейт: {total_hashrate} Th/s\n"
+        f"Хешрейт: {hashrate} Th/s\n"
         f"<a href='https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit'>Ссылка на таблицу</a>"
     )
 
