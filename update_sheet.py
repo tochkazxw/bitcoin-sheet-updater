@@ -3,7 +3,28 @@ from oauth2client.service_account import ServiceAccountCredentials
 import requests
 import datetime
 import pytz
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
 import os
+
+# --- Вспомогательные функции ---
+
+def send_telegram_message(text):
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        print("⚠️ TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID не заданы.")
+        return
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        r = requests.post(url, data=payload, timeout=10)
+        if r.status_code == 200:
+            print("✅ Telegram уведомление отправлено.")
+        else:
+            print(f"❌ Ошибка Telegram: {r.text}")
+    except Exception as e:
+        print(f"❌ Ошибка при отправке Telegram: {e}")
 
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
@@ -13,22 +34,33 @@ def get_coingecko_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
         return float(r.json()["bitcoin"]["usd"])
-    except:
+    except Exception as e:
+        print(f"Ошибка CoinGecko: {e}")
         return None
 
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
         return float(r.json()["bpi"]["USD"]["rate_float"])
-    except:
+    except Exception as e:
+        print(f"Ошибка CoinDesk: {e}")
         return None
 
 def get_difficulty_and_hashrate():
     try:
-        diff = requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text.strip()
-        hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text.strip())
-        return diff, int(hashrate / 1000)
-    except:
+        diff_resp = requests.get("https://blockchain.info/q/getdifficulty", timeout=10)
+        hashrate_resp = requests.get("https://blockchain.info/q/hashrate", timeout=10)
+
+        diff_str = diff_resp.text.strip()
+        # Преобразуем научную нотацию в обычное число с пробелами для удобства чтения
+        difficulty = "{:,.0f}".format(float(diff_str)).replace(",", " ")
+
+        hashrate_ghs = float(hashrate_resp.text.strip())
+        hashrate_ths = int(hashrate_ghs / 1000)
+
+        return difficulty, hashrate_ths
+    except Exception as e:
+        print(f"Ошибка получения сложности и хешрейта: {e}")
         return "N/A", "N/A"
 
 def safe_int(val, default=0):
@@ -43,39 +75,53 @@ def safe_float(val, default=0.0):
     except:
         return default
 
-def send_telegram_message(text):
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
-        print("⚠️ TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID не заданы.")
-        return
-    try:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-        r = requests.post(url, data=payload, timeout=10)
-        if r.status_code != 200:
-            print(f"❌ Ошибка Telegram: {r.text}")
-    except Exception as e:
-        print(f"❌ Ошибка при отправке Telegram: {e}")
+# --- Авторизация и подключение к Google Sheets ---
 
-# Авторизация Google Sheets
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 
-def read_last_table():
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+service = build("sheets", "v4", credentials=credentials)
+
+# --- Функция чтения предыдущей таблицы ---
+
+def read_previous_table_values():
     all_values = sheet.get_all_values()
+    if not all_values:
+        return None
+
+    last_table_start = None
     for i in reversed(range(len(all_values))):
-        if all_values[i] and all_values[i][0].strip() == "Дата":
-            return all_values[i:i+9]
-    return None
+        if all_values[i] and all_values[i][0] == "Дата":
+            last_table_start = i
+            break
+
+    if last_table_start is None:
+        return None
+
+    table_length = 11
+
+    if last_table_start + table_length > len(all_values):
+        return all_values[last_table_start:]
+    else:
+        return all_values[last_table_start:last_table_start + table_length]
 
 try:
     today = get_today_moldova()
-    prices = [p for p in (get_coingecko_price(), get_coindesk_price()) if p]
+
+    prices = []
+    for source_func in [get_coingecko_price, get_coindesk_price]:
+        price = source_func()
+        if price is not None:
+            prices.append(price)
     btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
+
     difficulty, hashrate = get_difficulty_and_hashrate()
+
+    previous_table = read_previous_table_values()
 
     # Значения по умолчанию
     miners = 1000
@@ -96,33 +142,36 @@ try:
     usdt_income_dev = 4863.96
     parthash = 1725
     rabhash = 3105
-
-    prev = read_last_table()
-    if prev:
+    tsotah = 0.0
+    if previous_table:
         try:
-            miners = safe_int(prev[2][1], miners)
-            stock_hashrate = safe_int(prev[2][2], stock_hashrate)
-            attracted_hashrate = safe_int(prev[2][3], attracted_hashrate)
-            distribution = safe_float(prev[2][4], distribution)
-            hashrate_distribution_value = safe_int(prev[3][4], hashrate_distribution_value)
+            miners = safe_int(previous_table[2][1], miners)
+            stock_hashrate = safe_int(previous_table[2][2], stock_hashrate)
+            attracted_hashrate = safe_int(previous_table[2][3], attracted_hashrate)
+            distribution = safe_float(previous_table[2][4], distribution)
+            hashrate_distribution_value = safe_int(previous_table[3][4], hashrate_distribution_value)
 
-            avg_hashrate_per_miner = safe_int(prev[4][0], avg_hashrate_per_miner)
-            increase_hashrate = safe_int(prev[4][1], increase_hashrate)
-            partner_share = safe_float(prev[4][3], partner_share)
-            developer_share = safe_float(prev[4][4], developer_share)
+            avg_hashrate_per_miner = safe_int(previous_table[4][0], avg_hashrate_per_miner)
+            increase_hashrate = safe_int(previous_table[4][1], increase_hashrate)
+            partner_share = safe_float(previous_table[4][3], partner_share)
+            developer_share = safe_float(previous_table[4][4], developer_share)
 
-            growth_coeff = safe_float(prev[5][0], growth_coeff)
-            total_hashrate = safe_int(prev[5][1], total_hashrate)
-            btc_30d_income = safe_float(prev[5][3], btc_30d_income)
-            btc_income_dev = safe_float(prev[5][4], btc_income_dev)
+            growth_coeff = safe_float(previous_table[5][0], growth_coeff)
+            total_hashrate = safe_int(previous_table[5][1], total_hashrate)
+            btc_30d_income = safe_float(previous_table[5][3], btc_30d_income)
+            btc_income_dev = safe_float(previous_table[5][4], btc_income_dev)
 
-            useful_hashrate = safe_int(prev[6][1], useful_hashrate)
-            usdt_30d_income = safe_float(prev[6][3], usdt_30d_income)
-            usdt_income_dev = safe_float(prev[6][4], usdt_income_dev)
+            useful_hashrate = safe_int(previous_table[6][1], useful_hashrate)
+            usdt_30d_income = safe_float(previous_table[6][3], usdt_30d_income)
+            usdt_income_dev = safe_float(previous_table[6][4], usdt_income_dev)
+
+            # Пересчёт доли привлеченного хешрейта в процентах
+            if total_hashrate != 0:
+                tsotah = round(attracted_hashrate / hashrate * 100, 2)
+            else:
+                tsotah = 0.0
         except Exception as e:
-            print("⚠️ Ошибка чтения предыдущей таблицы:", e)
-
-    tsotah = round(attracted_hashrate / hashrate * 100, 2)
+            print(f"❌ Ошибка чтения данных из предыдущей таблицы: {e}")
 
     values = [
         ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт, Th", "Доля привлеченного хешрейта, %"],
@@ -140,26 +189,13 @@ try:
         ["Полезный хешрейт, Th", useful_hashrate, "Доход за 30 дней, USDT", usdt_30d_income, usdt_income_dev]
     ]
 
-    # Новая таблица — с отступом 1 строка
-    all_rows = len(sheet.get_all_values())
-    start_row = all_rows + 2
+    last_row = len(sheet.get_all_values())
+    start_row = last_row + 2
 
     for i, row in enumerate(values):
         sheet.insert_row(row, start_row + i)
 
-    send_telegram_message(
-        f"✅ Таблица обновлена: {today}\n"
-        f"Средний курс BTC: {btc_avg}\n"
-        f"Сложность: {difficulty}\n"
-        f"Хешрейт: {total_hashrate} Th/s\n"
-        f"<a href='https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit'>Открыть таблицу</a>"
-    )
-
-    print("✅ Таблица обновлена:", today)
+    print("✅ Обновление таблицы завершено.")
 
 except Exception as e:
-    print("❌ Ошибка:", e)
-    try:
-        send_telegram_message(f"❌ Ошибка при обновлении таблицы: {e}")
-    except:
-        pass
+    print(f"❌ Ошибка: {e}")
