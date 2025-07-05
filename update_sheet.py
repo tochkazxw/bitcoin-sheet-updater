@@ -7,7 +7,7 @@ import os
 import time
 import socket
 import warnings
-from decimal import Decimal
+import json
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -20,7 +20,19 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 MAX_RETRIES = 3
 REQUEST_TIMEOUT = 10
 
+def validate_credentials_file(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            json.load(f)
+        return True
+    except json.JSONDecodeError as e:
+        print(f"❌ Файл credentials.json невалиден: {e}")
+        return False
+
 def init_google_sheets():
+    if not validate_credentials_file(CREDENTIALS_FILE):
+        raise RuntimeError("Файл credentials.json содержит ошибки формата JSON")
+
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
     client = gspread.authorize(creds)
@@ -121,6 +133,7 @@ def calculate_values(btc_price, difficulty_str, hashrate_str):
 
 def send_telegram_message(text):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Переменные Telegram не заданы, пропускаем отправку сообщения")
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -204,7 +217,7 @@ def update_spreadsheet():
         send_telegram_message(message)
 
     except Exception as e:
-        error_msg = f"❌ Ошибка при обновлении таблицы: {str(e)}"
+        error_msg = f"❌ Ошибка при обновлении таблицы: {e}"
         print(error_msg)
         send_telegram_message(error_msg)
         raise
