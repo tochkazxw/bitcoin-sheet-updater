@@ -57,13 +57,13 @@ def get_coingecko_price():
     except:
         return None
 
-# Сложность и хешрейт из blockchain.info с переводом хешрейта в Th/s
+# Сложность и хешрейт из blockchain.info — без округлений и без экспоненты
 def get_difficulty_and_hashrate():
     try:
-        diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
-        hashrate_raw = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
-        hashrate_th = round(hashrate_raw / 1e12, 2)  # перевод в Th/s
-        return f"{diff:.2E}", hashrate_th
+        diff = requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text.strip()
+        hashrate = requests.get("https://blockchain.info/q/hashrate", timeout=10).text.strip()
+        # diff и hashrate — уже строки с полными цифрами
+        return diff, hashrate
     except:
         return "N/A", "N/A"
 
@@ -82,7 +82,7 @@ try:
 
     # Данные в таблицу
     values = [
-        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт, Th", "Доля привлеченного хешрейта, %"],
+        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт (Th)", "Доля привлеченного хешрейта, %"],
         [today, btc_avg, difficulty, hashrate, attracted_share_percent],
 
         ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
@@ -97,7 +97,7 @@ try:
         ["Полезный хешрейт, Th", 167670, "Доход за 30 дней, USDT", 2702.2, 4863.96]
     ]
 
-    # Добавляем данные в конец таблицы (не затирая старые)
+    # Добавляем данные в конец таблицы (append_rows принимает список списков)
     sheet.append_rows(values)
 
     # Telegram уведомление
