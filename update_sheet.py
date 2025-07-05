@@ -7,7 +7,7 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import os
 
-# --- Функции вспомогательные ---
+# --- Вспомогательные функции ---
 
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -62,6 +62,25 @@ def get_difficulty_and_hashrate():
         print(f"Ошибка получения сложности и хешрейта: {e}")
         return "N/A", "N/A"
 
+# Функции для безопасного парсинга чисел из строк
+def safe_parse_float(val, default=0.0):
+    if not val:
+        return default
+    try:
+        val = val.replace(' ', '').replace(',', '').replace('%', '')
+        return float(val)
+    except Exception:
+        return default
+
+def safe_parse_int(val, default=0):
+    if not val:
+        return default
+    try:
+        val = val.replace(' ', '').replace(',', '')
+        return int(float(val))
+    except Exception:
+        return default
+
 # --- Авторизация и подключение к Google Sheets ---
 
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -73,29 +92,21 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
-# --- Функция чтения предыдущих данных таблицы (последняя добавленная) ---
+# --- Чтение предыдущей таблицы ---
 
 def read_previous_table_values():
-    # Получаем все значения
     all_values = sheet.get_all_values()
     if not all_values:
-        return None  # Таблица пустая
-
-    # Найдём индекс, с которого начинается последняя таблица — по ключевому заголовку "Дата"
+        return None
     last_table_start = None
     for i in reversed(range(len(all_values))):
         if all_values[i] and all_values[i][0] == "Дата":
             last_table_start = i
             break
-
     if last_table_start is None:
         return None
-
-    # Считаем сколько строк занимает таблица (в нашем примере 11 строк)
     table_length = 11
-
     if last_table_start + table_length > len(all_values):
-        # Если таблица неполная, берём до конца
         return all_values[last_table_start:]
     else:
         return all_values[last_table_start:last_table_start + table_length]
@@ -116,32 +127,31 @@ try:
 
     previous_table = read_previous_table_values()
 
-    # По умолчанию значения, если нет предыдущей таблицы
+    # Значения по умолчанию
     miners = 1000
     stock_hashrate = 150000
     attracted_hashrate = 172500
     total_hashrate = 172500
     attracted_share_percent = 0.04
 
-    # Если предыдущая таблица есть — пытаемся прочитать и использовать предыдущие данные (миннеры, хешрейты и т.д.)
     if previous_table:
         try:
-            # Предположим, что данные лежат в фиксированных позициях в таблице, например:
-            # Кол-во майнеров — строка 2 в таблице (index 1), столбец 1 (0-based)
             miners_val = previous_table[2][1]
-            if miners_val.isdigit():
-                miners = int(miners_val)
+            miners = safe_parse_int(miners_val, 1000)
 
             stock_hashrate_val = previous_table[2][2]
-            attracted_hashrate_val = previous_table[2][3]
-            total_hashrate_val = previous_table[4][1]
-            attracted_share_percent_val = previous_table[1][4]
+            stock_hashrate = safe_parse_int(stock_hashrate_val, 150 * miners)
 
-            # Приводим к нужным типам
-            stock_hashrate = int(stock_hashrate_val.replace(',', '').replace(' ', '')) if stock_hashrate_val else 150 * miners
-            attracted_hashrate = int(attracted_hashrate_val.replace(',', '').replace(' ', '')) if attracted_hashrate_val else int(stock_hashrate * 1.15)
-            total_hashrate = int(total_hashrate_val.replace(',', '').replace(' ', '')) if total_hashrate_val else stock_hashrate + attracted_hashrate
-            attracted_share_percent = float(attracted_share_percent_val) if attracted_share_percent_val else round(attracted_hashrate / total_hashrate * 100, 2)
+            attracted_hashrate_val = previous_table[2][3]
+            attracted_hashrate = safe_parse_int(attracted_hashrate_val, int(stock_hashrate * 1.15))
+
+            total_hashrate_val = previous_table[4][1]
+            total_hashrate = safe_parse_int(total_hashrate_val, stock_hashrate + attracted_hashrate)
+
+            attracted_share_percent_val = previous_table[1][4]
+            attracted_share_percent = safe_parse_float(attracted_share_percent_val, round(attracted_hashrate / total_hashrate * 100, 2))
+
+            print(f"Прочитано: miners={miners}, stock_hashrate={stock_hashrate}, attracted_hashrate={attracted_hashrate}, total_hashrate={total_hashrate}, attracted_share_percent={attracted_share_percent}")
 
         except Exception as e:
             print(f"Ошибка обработки предыдущих данных: {e}")
