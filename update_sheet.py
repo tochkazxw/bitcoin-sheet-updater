@@ -22,6 +22,12 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 MAX_RETRIES = 3
 REQUEST_TIMEOUT = 10
 
+# API Endpoints
+COINGECKO_API = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
+COINDESK_API = "https://api.coindesk.com/v1/bpi/currentprice.json"
+HASHRATE_API = "https://blockchain.info/q/hashrate"
+DIFFICULTY_API = "https://blockchain.info/q/getdifficulty"
+
 def init_google_sheets():
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets",
@@ -57,64 +63,47 @@ def safe_api_request(url, parser, retries=MAX_RETRIES):
     return None
 
 def get_btc_price():
-    apis = [
-        {
-            "name": "CoinGecko",
-            "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-            "parser": lambda r: float(r.json()["bitcoin"]["usd"])
-        },
-        {
-            "name": "Alternative.me",
-            "url": "https://api.alternative.me/v2/ticker/bitcoin/",
-            "parser": lambda r: float(r.json()["data"]["1"]["quotes"]["USD"]["price"])
-        }
-    ]
+    # Пробуем сначала CoinGecko
+    coingecko_price = safe_api_request(
+        COINGECKO_API,
+        lambda r: float(r.json()["bitcoin"]["usd"])
+    )
     
-    prices = []
-    for api in apis:
-        price = safe_api_request(api["url"], api["parser"])
-        if price is not None:
-            prices.append(price)
-            print(f"Курс успешно получен от {api['name']}")
+    if coingecko_price is not None:
+        print("Курс успешно получен от CoinGecko")
+        return coingecko_price
     
-    return round(sum(prices) / len(prices), 2) if prices else None
+    # Если CoinGecko не ответил, пробуем CoinDesk
+    coindesk_price = safe_api_request(
+        COINDESK_API,
+        lambda r: float(r.json()["bpi"]["USD"]["rate_float"])
+    )
+    
+    if coindesk_price is not None:
+        print("Курс успешно получен от CoinDesk")
+        return coindesk_price
+    
+    print("Не удалось получить курс BTC")
+    return None
 
 def get_difficulty_and_hashrate():
-    sources = [
-        {
-            "name": "Blockchain.com",
-            "url": "https://api.blockchain.info/stats",
-            "parser": lambda r: (
-                str(r.json()["difficulty"]),
-                str(r.json()["hash_rate"] * 1e12)
-            )
-        },
-        {
-            "name": "Bitaps",
-            "url": "https://api.bitaps.com/btc/v1/blockchain/statistics",
-            "parser": lambda r: (
-                str(r.json()["data"]["difficulty"]),
-                str(r.json()["data"]["hashrate"])
-            )
-        }
-    ]
-
-    for source in sources:
-        try:
-            print(f"Пробуем получить данные от {source['name']}...")
-            response = requests.get(source["url"], timeout=10)
-            response.raise_for_status()
-            difficulty, hashrate = source["parser"](response)
-            
-            if difficulty and hashrate:
-                print(f"Успешно получены данные от {source['name']}")
-                return f"{float(difficulty):.2E}", f"{float(hashrate)/1e12:,.0f}"
-                
-        except Exception as e:
-            print(f"Ошибка при запросе к {source['name']}: {e}")
-            continue
-
-    print("Все API недоступны, используем значения по умолчанию")
+    # Получаем сложность
+    difficulty = safe_api_request(
+        DIFFICULTY_API,
+        lambda r: float(r.text)
+    )
+    
+    # Получаем хешрейт
+    hashrate = safe_api_request(
+        HASHRATE_API,
+        lambda r: float(r.text)
+    )
+    
+    if difficulty is not None and hashrate is not None:
+        return f"{difficulty:.2E}", f"{hashrate/1e12:,.0f}"
+    
+    # Резервные значения
+    print("Не удалось получить данные о сложности/хешрейте, используем значения по умолчанию")
     return "1.17E+14", "965,130"
 
 def calculate_values(btc_price, difficulty_str, hashrate_str):
