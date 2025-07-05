@@ -1,90 +1,28 @@
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-import requests
-import datetime
-import pytz
-from googleapiclient.discovery import build
-from google.oauth2 import service_account
-import os
+# ... все твои импорты и авторизации ...
 
-# Авторизация gspread
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-client = gspread.authorize(creds)
-sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
-
-# Авторизация Google Sheets API (если нужно форматирование — пока не используется)
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
-service = build("sheets", "v4", credentials=credentials)
-
-def send_telegram_message(text):
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
-        print("⚠️ TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID не заданы.")
-        return
-    try:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-        r = requests.post(url, data=payload, timeout=10)
-        if r.status_code == 200:
-            print("✅ Telegram уведомление отправлено.")
-        else:
-            print(f"❌ Ошибка Telegram: {r.text}")
-    except Exception as e:
-        print(f"❌ Ошибка при отправке Telegram: {e}")
-
-def get_today_moldova():
-    tz = pytz.timezone('Europe/Chisinau')
-    return datetime.datetime.now(tz).strftime("%d.%m.%Y")
-
-def get_coingecko_price():
-    try:
-        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
-        return float(r.json()["bitcoin"]["usd"])
-    except Exception as e:
-        print(f"Ошибка CoinGecko: {e}")
+def read_last_table():
+    all_values = sheet.get_all_values()
+    start_indexes = [i for i, row in enumerate(all_values) if row and row[0] == "Дата"]
+    if not start_indexes:
         return None
+    last_start = start_indexes[-1]
+    return all_values[last_start:last_start+10]
 
-def get_coindesk_price():
+def get_miners_from_last_table(last_table):
+    if last_table and len(last_table) > 3:
+        miners_str = last_table[3][0]
+        if miners_str.isdigit():
+            return int(miners_str)
+    return 1000
+
+def get_value_from_table(last_table, row_idx, col_idx, default):
     try:
-        r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
-        return float(r.json()["bpi"]["USD"]["rate_float"])
-    except Exception as e:
-        print(f"Ошибка CoinDesk: {e}")
-        return None
-
-def get_difficulty_and_hashrate():
-    try:
-        diff_resp = requests.get("https://blockchain.info/q/getdifficulty", timeout=10)
-        hashrate_resp = requests.get("https://blockchain.info/q/hashrate", timeout=10)
-
-        diff_str = diff_resp.text.strip()
-        difficulty = diff_str if 'e' not in diff_str.lower() else f"{float(diff_str):.0f}"
-
-        hashrate_ghs = float(hashrate_resp.text.strip())
-        hashrate_ths = int(hashrate_ghs / 1000)
-
-        return difficulty, hashrate_ths
-    except Exception as e:
-        print(f"Ошибка получения сложности и хешрейта: {e}")
-        return "N/A", "N/A"
-
-def read_previous_miners():
-    try:
-        col_a = sheet.col_values(1)
-        for idx, val in enumerate(col_a):
-            if val == "Кол-во майнеров":
-                row_num = idx + 1
-                miners_cell = sheet.cell(row_num + 1, 1).value
-                if miners_cell and miners_cell.isdigit():
-                    return int(miners_cell)
-                break
-        return 1000
-    except Exception as e:
-        print(f"Ошибка чтения количества майнеров: {e}")
-        return 1000
+        val = last_table[row_idx][col_idx]
+        if val.strip() == "":
+            return default
+        return val
+    except:
+        return default
 
 try:
     today = get_today_moldova()
@@ -98,7 +36,14 @@ try:
 
     difficulty, hashrate = get_difficulty_and_hashrate()
 
-    miners = read_previous_miners()
+    last_table = read_last_table()
+
+    miners = get_miners_from_last_table(last_table)
+
+    # Можно подставить другие значения из last_table, например, распределения, партнеров и т.д.
+    # Ниже пример как взять данные, если нужно:
+    # stock_hashrate = 150 * miners
+    # attracted_hashrate = int(stock_hashrate * 1.15)
 
     stock_hashrate = 150 * miners
     attracted_hashrate = int(stock_hashrate * 1.15)
