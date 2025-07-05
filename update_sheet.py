@@ -6,6 +6,7 @@ import pytz
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import os
+from googleapiclient.errors import HttpError
 
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -103,6 +104,64 @@ def read_previous_table_values():
     else:
         return all_values[last_table_start:last_table_start + table_length]
 
+def apply_borders_and_colors(spreadsheet_id, start_row, num_rows, num_cols):
+    requests = []
+
+    # Добавляем границы вокруг всей области таблицы
+    requests.append({
+        "updateBorders": {
+            "range": {
+                "sheetId": 0,
+                "startRowIndex": start_row - 1,
+                "endRowIndex": start_row - 1 + num_rows,
+                "startColumnIndex": 0,
+                "endColumnIndex": num_cols
+            },
+            "top": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "bottom": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "left": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "right": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "innerHorizontal": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "innerVertical": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}}
+        }
+    })
+
+    colors = [
+        {"red": 0.9, "green": 0.9, "blue": 0.9},
+        {"red": 0.8, "green": 0.9, "blue": 1.0},
+        {"red": 1.0, "green": 1.0, "blue": 0.8}
+    ]
+
+    for i in range(num_rows):
+        color = colors[i % 3]
+        requests.append({
+            "repeatCell": {
+                "range": {
+                    "sheetId": 0,
+                    "startRowIndex": start_row - 1 + i,
+                    "endRowIndex": start_row - 1 + i + 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": num_cols
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": color
+                    }
+                },
+                "fields": "userEnteredFormat.backgroundColor"
+            }
+        })
+
+    try:
+        body = {"requests": requests}
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body=body
+        ).execute()
+        print("✅ Границы и заливка применены.")
+    except HttpError as err:
+        print(f"❌ Ошибка при применении границ и заливки: {err}")
+
 try:
     today = get_today_moldova()
 
@@ -185,6 +244,13 @@ try:
 
     for i, row in enumerate(values):
         sheet.insert_row(row, start_row + i)
+
+    # --- Добавленный блок для обводки и окраски ---
+    spreadsheet_id = "1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU"
+    num_rows = len(values)
+    num_cols = len(values[0])
+    apply_borders_and_colors(spreadsheet_id, start_row, num_rows, num_cols)
+    # ----------------------------------------------
 
     send_telegram_message(
         f"✅ Таблица обновлена: {today}\n"
