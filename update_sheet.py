@@ -139,7 +139,7 @@ try:
     useful_hashrate = 167670
     usdt_30d_income = 2702.2
     usdt_income_dev = 4863.96
-    tsotah = 0.04
+    tsotah = attracted_hashrate // hashrate * 100
     parthash = 1725
     rabhash = 3105
     if previous_table:
