@@ -3,236 +3,110 @@ from oauth2client.service_account import ServiceAccountCredentials
 import requests
 import datetime
 import pytz
-from decimal import Decimal
-import os
-from google.oauth2 import service_account
 from googleapiclient.discovery import build
-import socket
-import time
-import warnings
+from google.oauth2 import service_account
+import os
 
-# Игнорируем предупреждения
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+# Авторизация gspread
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+client = gspread.authorize(creds)
+sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 
-# Конфигурация
-SPREADSHEET_ID = "1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU"
-CREDENTIALS_FILE = "credentials.json"
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-MAX_RETRIES = 3
-REQUEST_TIMEOUT = 10
+# Авторизация Google Sheets API (если нужно форматирование — пока не используется)
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+service = build("sheets", "v4", credentials=credentials)
 
-# API Endpoints
-COINGECKO_API = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
-COINDESK_API = "https://api.coindesk.com/v1/bpi/currentprice.json"
-HASHRATE_API = "https://blockchain.info/q/hashrate"
-DIFFICULTY_API = "https://blockchain.info/q/getdifficulty"
-
-def init_google_sheets():
+# Функция отправки Telegram-уведомления
+def send_telegram_message(text):
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        print("⚠️ Не заданы TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID.")
+        return
     try:
-        scope = ["https://www.googleapis.com/auth/spreadsheets",
-                 "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
-
-        SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-        credentials = service_account.Credentials.from_service_account_file(
-            CREDENTIALS_FILE, scopes=SCOPES)
-        service = build("sheets", "v4", credentials=credentials)
-
-        return sheet, service
-    except Exception as e:
-        print(f"Ошибка инициализации Google Sheets: {e}")
-        raise
-
-def get_current_date():
-    tz = pytz.timezone('Europe/Chisinau')
-    return datetime.datetime.now(tz).strftime("%d.%m.%y")
-
-def safe_api_request(url, parser, retries=MAX_RETRIES):
-    for attempt in range(retries):
-        try:
-            response = requests.get(url, timeout=REQUEST_TIMEOUT)
-            response.raise_for_status()
-            return parser(response)
-        except (requests.exceptions.RequestException, socket.gaierror) as e:
-            print(f"Попытка {attempt + 1} из {retries} не удалась для {url}: {e}")
-            if attempt < retries - 1:
-                time.sleep(2)
-    return None
-
-def get_btc_price():
-    coingecko_price = safe_api_request(
-        COINGECKO_API,
-        lambda r: float(r.json()["bitcoin"]["usd"])
-    )
-    if coingecko_price is not None:
-        print("Курс успешно получен от CoinGecko")
-        return coingecko_price
-
-    coindesk_price = safe_api_request(
-        COINDESK_API,
-        lambda r: float(r.json()["bpi"]["USD"]["rate_float"])
-    )
-    if coindesk_price is not None:
-        print("Курс успешно получен от CoinDesk")
-        return coindesk_price
-
-    print("Не удалось получить курс BTC")
-    return None
-
-def get_difficulty_and_hashrate():
-    difficulty = safe_api_request(DIFFICULTY_API, lambda r: float(r.text))
-    hashrate = safe_api_request(HASHRATE_API, lambda r: float(r.text))
-    if difficulty is not None and hashrate is not None:
-        return f"{difficulty:.2E}", round(hashrate / 1e12)
-    print("Не удалось получить данные о сложности/хешрейте, используем значения по умолчанию")
-    return "1.17E+14", 965130
-
-def calculate_values(btc_price, difficulty_str, hashrate):
-    try:
-        if 'E' in difficulty_str:
-            base, exponent = difficulty_str.split('E')
-            difficulty = float(base) * (10 ** int(exponent))
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        r = requests.post(url, data=payload, timeout=10)
+        if r.status_code == 200:
+            print("✅ Уведомление отправлено в Telegram.")
         else:
-            difficulty = float(difficulty_str.replace(',', '')) if difficulty_str != "N/A" else 1.17e14
-
-        miners = 1000
-        avg_hash_per_miner = 150
-        stock_hashrate = miners * avg_hash_per_miner
-        growth_rate = 0.15
-        attracted_hashrate = stock_hashrate * growth_rate
-        total_hashrate = stock_hashrate + attracted_hashrate
-        distribution_percent = 0.028
-        useful_hashrate = total_hashrate * (1 - distribution_percent)
-
-        partner_percent = 0.01
-        dev_percent = 0.018
-
-        partner_btc = (30 * 86400 * 3.125 * attracted_hashrate * 1e12) / (difficulty * 4294967296)
-        dev_btc = partner_btc * (dev_percent / partner_percent)
-
-        partner_usdt = partner_btc * btc_price
-        dev_usdt = dev_btc * btc_price
-
-        return {
-            "miners": miners,
-            "stock_hashrate": round(stock_hashrate),
-            "attracted_hashrate": round(attracted_hashrate),
-            "total_hashrate": round(total_hashrate),
-            "useful_hashrate": round(useful_hashrate),
-            "partner_btc": f"{partner_btc:.8f}",
-            "dev_btc": f"{dev_btc:.8f}",
-            "partner_usdt": f"{partner_usdt:.2f}",
-            "dev_usdt": f"{dev_usdt:.2f}"
-        }
+            print(f"❌ Ошибка отправки Telegram: {r.text}")
     except Exception as e:
-        print(f"Ошибка расчетов: {e}")
+        print(f"❌ Telegram исключение: {e}")
+
+# Получение даты в часовом поясе Молдовы
+def get_today_moldova():
+    tz = pytz.timezone('Europe/Chisinau')
+    return datetime.datetime.now(tz).strftime("%d.%m.%Y")
+
+# Курс с CoinDesk
+def get_coindesk_price():
+    try:
+        r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
+        return float(r.json()["bpi"]["USD"]["rate_float"])
+    except:
         return None
 
-def send_telegram_message(text):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}
+# Курс с CoinGecko
+def get_coingecko_price():
     try:
-        requests.post(url, json=payload, timeout=REQUEST_TIMEOUT)
-    except Exception as e:
-        print(f"Ошибка отправки в Telegram: {e}")
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
+        return float(r.json()["bitcoin"]["usd"])
+    except:
+        return None
 
-def update_spreadsheet():
+# Сложность и хешрейт из blockchain.info
+def get_difficulty_and_hashrate():
     try:
-        sheet, service = init_google_sheets()
+        diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
+        hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
+        return round(diff, 2), round(hashrate)
+    except:
+        return "N/A", "N/A"
 
-        today = get_current_date()
-        btc_price = get_btc_price()
-        difficulty, hashrate = get_difficulty_and_hashrate()
+# Основная логика
+try:
+    today = get_today_moldova()
+    prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
+    btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
+    difficulty, hashrate = get_difficulty_and_hashrate()
 
-        if btc_price is None:
-            raise ValueError("Не удалось получить курс BTC")
+    # Данные в таблицу
+    values = [
+        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт"],
+        [today, btc_avg, difficulty, hashrate],
 
-        calculated = calculate_values(btc_price, difficulty, hashrate)
-        if not calculated:
-            raise ValueError("Ошибка в расчетах производных значений")
+        ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение"],
+        [1000, 150000, 172500, "2.80%"],
 
-        values = [
-            ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th", "В привлеченного хешрейта, %"],
-            [today, btc_price, difficulty, hashrate, "0.04"],
-            ["Количество майнеров", "Стоковый хешрейт, Th", "Привлеченный хешрейт, Th", "Распределение", "Хешрейт к распределению"],
-            [calculated["miners"], calculated["stock_hashrate"], calculated["attracted_hashrate"], "2.80%", 4830],
-            ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"],
-            [150, 22500, "", "1.00%", "1.80%"],
-            ["Коэфф. прироста", "Суммарный хешрейт", "", calculated["partner_btc"], calculated["dev_btc"]],
-            ["15%", calculated["total_hashrate"], "Доход за 30 дней, BTC", "", ""],
-            ["Полезный хешрейт, Th", calculated["useful_hashrate"], "Доход за 30 дней, USDT", calculated["partner_usdt"], calculated["dev_usdt"]]
-        ]
+        ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"],
+        [150, 22500, "", "1%", "1.8%"],
 
-        sheet.clear()
-        sheet.update(range_name="A1:E9", values=values)
+        ["", "", "", 1725, 3105],
 
-        spreadsheet = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-        sheet_id = next((s["properties"]["sheetId"]
-                        for s in spreadsheet["sheets"] if s["properties"]["title"] == sheet.title), None)
+        ["Коэфф. прироста", "Суммарный хешрейт", "", "Доход за 30 дней, BTC", ""],
+        ["15%", 172500, "", "", ""],
 
-        if sheet_id is None:
-            raise ValueError("Не удалось получить sheetId для форматирования")
+        ["Полезный хешрейт, Th", 167670, "Доход за 30 дней, USDT", "", ""]
+    ]
 
-        requests = [
-            {
-                "repeatCell": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "startRowIndex": 0,
-                        "endRowIndex": 1
-                    },
-                    "cell": {
-                        "userEnteredFormat": {
-                            "textFormat": {"bold": True}
-                        }
-                    },
-                    "fields": "userEnteredFormat.textFormat.bold"
-                }
-            },
-            {
-                "updateBorders": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "startRowIndex": 0,
-                        "endRowIndex": len(values),
-                        "startColumnIndex": 0,
-                        "endColumnIndex": 5
-                    },
-                    "top": {"style": "SOLID", "color": {"red": 0, "green": 0, "blue": 0}},
-                    "bottom": {"style": "SOLID", "color": {"red": 0, "green": 0, "blue": 0}},
-                    "left": {"style": "SOLID", "color": {"red": 0, "green": 0, "blue": 0}},
-                    "right": {"style": "SOLID", "color": {"red": 0, "green": 0, "blue": 0}},
-                    "innerHorizontal": {"style": "SOLID", "color": {"red": 0.8, "green": 0.8, "blue": 0.8}},
-                    "innerVertical": {"style": "SOLID", "color": {"red": 0.8, "green": 0.8, "blue": 0.8}}
-                }
-            }
-        ]
+    # Очистка таблицы и вставка новых данных
+    sheet.clear()
+    sheet.update("A1", values)
 
-        service.spreadsheets().batchUpdate(
-            spreadsheetId=SPREADSHEET_ID,
-            body={"requests": requests}
-        ).execute()
+    # Telegram уведомление
+    send_telegram_message(
+        f"✅ Таблица обновлена: {today}\n"
+        f"Средний курс BTC: {btc_avg}\n"
+        f"Сложность: {difficulty}\n"
+        f"Хешрейт: {hashrate} Th/s\n"
+        f"<a href='https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit'>Ссылка на таблицу</a>"
+    )
 
-        message = (
-            f"✅ Таблица успешно обновлена\n"
-            f"Дата: {today}\n"
-            f"Курс BTC: ${btc_price}\n"
-            f"Сложность: {difficulty}\n"
-            f"Хешрейт: {hashrate} Th/s\n"
-            f"Ссылка: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit"
-        )
-        send_telegram_message(message)
+    print("✅ Обновление завершено.")
 
-    except Exception as e:
-        error_msg = f"❌ Ошибка при обновлении таблицы: {str(e)}"
-        print(error_msg)
-        send_telegram_message(error_msg)
-        raise
-
-if __name__ == "__main__":
-    update_spreadsheet()
+except Exception as e:
+    print(f"❌ Ошибка: {e}")
+    send_telegram_message(f"❌ Ошибка при обновлении таблицы: {e}")
