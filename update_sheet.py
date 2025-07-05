@@ -11,7 +11,7 @@ import socket
 import time
 import warnings
 
-# Игнорируем предупреждения о deprecated функциях
+# Игнорируем предупреждения
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Конфигурация
@@ -80,26 +80,45 @@ def get_btc_price():
     return round(sum(prices) / len(prices), 2) if prices else None
 
 def get_difficulty_and_hashrate():
-    # Альтернативный источник: Blockstream API
-    def parse_blockstream(response):
-        data = response.json()
-        return str(data["difficulty"]), str(int(data["current_hashrate"]))
-    
-    blockstream_data = safe_api_request(
-        "https://blockstream.info/api/blocks/tip/height",
-        lambda r: {"difficulty": 1.17e14, "current_hashrate": 965130501885}  # Заглушка, замените на реальный парсер
-    )
-    
-    if blockstream_data:
-        difficulty, hashrate = blockstream_data
-        return f"{float(difficulty):.2E}", f"{float(hashrate)/1e12:,.0f}"
-    
-    print("Используем значения по умолчанию для сложности и хешрейта")
+    sources = [
+        {
+            "name": "Blockchain.com",
+            "url": "https://api.blockchain.info/stats",
+            "parser": lambda r: (
+                str(r.json()["difficulty"]),
+                str(r.json()["hash_rate"] * 1e12)
+            )
+        },
+        {
+            "name": "Bitaps",
+            "url": "https://api.bitaps.com/btc/v1/blockchain/statistics",
+            "parser": lambda r: (
+                str(r.json()["data"]["difficulty"]),
+                str(r.json()["data"]["hashrate"])
+            )
+        }
+    ]
+
+    for source in sources:
+        try:
+            print(f"Пробуем получить данные от {source['name']}...")
+            response = requests.get(source["url"], timeout=10)
+            response.raise_for_status()
+            difficulty, hashrate = source["parser"](response)
+            
+            if difficulty and hashrate:
+                print(f"Успешно получены данные от {source['name']}")
+                return f"{float(difficulty):.2E}", f"{float(hashrate)/1e12:,.0f}"
+                
+        except Exception as e:
+            print(f"Ошибка при запросе к {source['name']}: {e}")
+            continue
+
+    print("Все API недоступны, используем значения по умолчанию")
     return "1.17E+14", "965,130"
 
 def calculate_values(btc_price, difficulty_str, hashrate_str):
     try:
-        # Преобразование строк в числа
         if 'E' in difficulty_str:
             base, exponent = difficulty_str.split('E')
             difficulty = float(base) * (10 ** int(exponent))
@@ -108,7 +127,6 @@ def calculate_values(btc_price, difficulty_str, hashrate_str):
         
         hashrate = float(hashrate_str.replace(',', '')) if hashrate_str != "N/A" else 965130
         
-        # Основные параметры
         miners = 1000
         avg_hash_per_miner = 150
         stock_hashrate = miners * avg_hash_per_miner
@@ -118,7 +136,6 @@ def calculate_values(btc_price, difficulty_str, hashrate_str):
         distribution_percent = 0.028
         useful_hashrate = total_hashrate * (1 - distribution_percent)
         
-        # Доходы
         partner_percent = 0.01
         dev_percent = 0.018
         
@@ -158,7 +175,6 @@ def update_spreadsheet():
     try:
         sheet, service = init_google_sheets()
         
-        # Получаем данные
         today = get_current_date()
         btc_price = get_btc_price()
         difficulty, hashrate = get_difficulty_and_hashrate()
@@ -166,12 +182,10 @@ def update_spreadsheet():
         if btc_price is None:
             raise ValueError("Не удалось получить курс BTC")
         
-        # Вычисляем производные значения
         calculated = calculate_values(btc_price, difficulty, hashrate)
         if not calculated:
             raise ValueError("Ошибка в расчетах производных значений")
         
-        # Подготавливаем данные для вставки
         values = [
             ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th", "В привлеченного хешрейта, %"],
             [today, btc_price, difficulty, hashrate, "0.04"],
@@ -184,11 +198,9 @@ def update_spreadsheet():
             ["Полезный хешрейт, Th", calculated["useful_hashrate"], "Доход за 30 дней, USDT", calculated["partner_usdt"], calculated["dev_usdt"]]
         ]
         
-        # Очищаем лист и вставляем данные (исправленный синтаксис)
         sheet.clear()
-        sheet.update(range_name="A1:E9", values=values)  # Исправлено здесь
+        sheet.update(range_name="A1:E9", values=values)
         
-        # Получаем sheetId для форматирования
         spreadsheet = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
         sheet_id = None
         for sheet_prop in spreadsheet['sheets']:
@@ -199,7 +211,6 @@ def update_spreadsheet():
         if sheet_id is None:
             raise ValueError("Не удалось получить sheetId для форматирования")
         
-        # Форматирование
         requests = [
             {
                 "repeatCell": {
@@ -240,7 +251,6 @@ def update_spreadsheet():
             body={"requests": requests}
         ).execute()
         
-        # Уведомление
         message = (
             f"✅ Таблица успешно обновлена\n"
             f"Дата: {today}\n"
