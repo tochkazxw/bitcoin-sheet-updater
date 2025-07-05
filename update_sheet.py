@@ -118,10 +118,10 @@ try:
 
     # По умолчанию значения, если нет предыдущей таблицы
     miners = 1000
-    stock_hashrate = 150 * miners
-    attracted_hashrate = int(stock_hashrate * 1.15)
-    total_hashrate = stock_hashrate + attracted_hashrate
-    attracted_share_percent = round(attracted_hashrate / total_hashrate * 100, 2)
+    stock_hashrate = 150000
+    attracted_hashrate = 172500
+    total_hashrate = 172500
+    attracted_share_percent = 0.04
 
     # Если предыдущая таблица есть — пытаемся прочитать и использовать предыдущие данные (миннеры, хешрейты и т.д.)
     if previous_table:
