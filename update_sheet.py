@@ -78,7 +78,7 @@ def get_difficulty_and_hashrate():
 num_miners = 1000
 stock_hashrate = 150000
 attracted_hashrate = 172500
-distribution = "2.80%"
+distribution = 2.80%
 
 # Получаем данные из API
 
