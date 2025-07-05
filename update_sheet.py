@@ -68,15 +68,7 @@ def safe_int(val, default=0):
 
 def safe_float(val, default=0.0):
     try:
-        val_str = str(val).replace(',', '.').strip()
-        if '%' in val_str:
-            val_str = val_str.replace('%', '')
-            f = float(val_str) / 100
-        else:
-            f = float(val_str)
-            if f > 1:
-                f = f / 100
-        return f
+        return float(str(val).replace(',', '.').replace('%', '').strip())
     except:
         return default
 
