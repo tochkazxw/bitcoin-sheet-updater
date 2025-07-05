@@ -129,17 +129,19 @@ try:
     distribution = 0.028
     hashrate_distribution_value = 4830
     avg_hashrate_per_miner = 150
-    increase_hashrate = attracted_hashrate - stock_hashrate
+    increase_hashrate = 22500
     partner_share = 0.01
     developer_share = 0.018
     growth_coeff = 0.15
-    total_hashrate = stock_hashrate + attracted_hashrate
+    total_hashrate = 172500
     btc_30d_income = 0.02573522
     btc_income_dev = 0.04632340
-    useful_hashrate = total_hashrate - int(total_hashrate * 0.028)
+    useful_hashrate = 167670
     usdt_30d_income = 2702.2
     usdt_income_dev = 4863.96
-
+    tsotah = 0.04
+    parthash = 1725
+    rabhash = 3105
     if previous_table:
         try:
             miners = safe_int(previous_table[2][1], miners)
@@ -167,7 +169,7 @@ try:
 
     values = [
         ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт, Th", "Доля привлеченного хешрейта, %"],
-        [today, btc_avg, difficulty, hashrate, round(attracted_hashrate / total_hashrate * 100, 2) if total_hashrate else 0],
+        [today, btc_avg, difficulty, hashrate, tsotah],
 
         ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
         [miners, stock_hashrate, attracted_hashrate, distribution, hashrate_distribution_value],
@@ -175,7 +177,7 @@ try:
         ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"],
         [avg_hashrate_per_miner, increase_hashrate, "", partner_share, developer_share],
 
-        ["Коэфф. прироста", "Суммарный хешрейт", "", 1725, 3105],
+        ["Коэфф. прироста", "Суммарный хешрейт", "", parthash, rabhash ],
         [growth_coeff, total_hashrate, "Доход за 30 дней, BTC", btc_30d_income, btc_income_dev],
 
         ["Полезный хешрейт, Th", useful_hashrate, "Доход за 30 дней, USDT", usdt_30d_income, usdt_income_dev]
