@@ -6,7 +6,7 @@ import pytz
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import os
-import decimal
+from decimal import Decimal, ROUND_DOWN
 
 # Авторизация gspread
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -14,7 +14,7 @@ creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", sco
 client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 
-# Авторизация Google Sheets API
+# Авторизация Google Sheets API (если нужно форматирование — пока не используется)
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
@@ -58,38 +58,31 @@ def get_coingecko_price():
     except:
         return None
 
-# Получаем сложность из BlockCypher (полное число без экспоненты)
-def get_difficulty_blockcypher():
+# Сложность и хешрейт (в Th/s и без экспоненты)
+def get_difficulty_and_hashrate():
     try:
-        r = requests.get("https://api.blockcypher.com/v1/btc/main", timeout=10)
-        diff = r.json().get("difficulty")
-        if diff is None:
-            return "N/A"
-        # Используем Decimal для корректного вывода без научной нотации
-        return format(decimal.Decimal(diff), 'f')
-    except:
-        return "N/A"
+        diff_raw = requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text.strip()
+        hashrate_raw = requests.get("https://blockchain.info/q/hashrate", timeout=10).text.strip()
 
-# Получаем хешрейт из blockchain.info, переводим в Th (делим на 1e12), без экспоненты
-def get_hashrate_th():
-    try:
-        r = requests.get("https://blockchain.info/q/hashrate", timeout=10)
-        hashrate = decimal.Decimal(r.text.strip())
-        hashrate_th = hashrate / decimal.Decimal(1e12)
-        # Форматируем без экспоненты
-        return format(hashrate_th, 'f')
-    except:
-        return "N/A"
+        # Сложность как целое число
+        diff = str(int(Decimal(diff_raw)))
+
+        # Хешрейт: GH/s → Th/s, округление вниз
+        hashrate_th = (Decimal(hashrate_raw) / Decimal('1e3')).quantize(Decimal('1'), rounding=ROUND_DOWN)
+        hashrate_th_str = str(hashrate_th)
+
+        return diff, hashrate_th_str
+    except Exception as e:
+        print(f"Ошибка при получении сложности и хешрейта: {e}")
+        return "N/A", "N/A"
 
 # Основная логика
 try:
     today = get_today_moldova()
     prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
     btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
-    difficulty = get_difficulty_blockcypher()
-    hashrate_th = get_hashrate_th()
+    difficulty, hashrate = get_difficulty_and_hashrate()
 
-    # Стоковый и привлечённый хешрейты — если хочешь менять, правь здесь
     stock_hashrate = 150000
     attracted_hashrate = 172500
     total_hashrate = stock_hashrate + attracted_hashrate
@@ -98,7 +91,7 @@ try:
     # Данные в таблицу
     values = [
         ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт (Th)", "Доля привлеченного хешрейта, %"],
-        [today, btc_avg, difficulty, hashrate_th, attracted_share_percent],
+        [today, btc_avg, difficulty, hashrate, attracted_share_percent],
 
         ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
         [1000, stock_hashrate, attracted_hashrate, "2.80%", 4830],
@@ -112,7 +105,7 @@ try:
         ["Полезный хешрейт, Th", 167670, "Доход за 30 дней, USDT", 2702.2, 4863.96]
     ]
 
-    # Добавляем данные в конец таблицы
+    # Добавить в конец таблицы, не удаляя старое
     sheet.append_rows(values)
 
     # Telegram уведомление
@@ -120,7 +113,7 @@ try:
         f"✅ Таблица обновлена: {today}\n"
         f"Средний курс BTC: {btc_avg}\n"
         f"Сложность: {difficulty}\n"
-        f"Хешрейт: {hashrate_th} Th/s\n"
+        f"Хешрейт: {hashrate} Th/s\n"
         f"<a href='https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit'>Ссылка на таблицу</a>"
     )
 
