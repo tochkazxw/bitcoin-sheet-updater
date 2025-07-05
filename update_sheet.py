@@ -73,157 +73,40 @@ def get_difficulty_and_hashrate():
         return "N/A", "N/A"
 
 # Основная логика
-
-# Получаем значения
-num_miners = 1000
-stock_hashrate = 150000
-attracted_hashrate = 172500
-distribution = 0.028
-
-# Получаем данные из API
-
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Вычисляем долю привлечённого хешрейта
-try:
-    hashrate_float = float(hashrate)
-    attracted_percent = round((attracted_hashrate / hashrate_float) * 100, 2)
-except:
-    attracted_percent = "N/A"
+# Заголовки и данные
+labels1 = ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт"]
+data1 = [today, str(btc_avg), difficulty, hashrate]
 
-# Добавляем пустую строку
-sheet.append_row([])
+labels2 = ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение"]
+data2 = [1000, 150000, 172500, "2.80%"]
 
-# Добавляем заголовки и значения (1 строка)
-sheet.append_row([
-    "Дата",
-    "Средний курс BTC (USD)",
-    "Сложность",
-    "Общий хешрейт сети, Th",
-    "Доля привлеченного хешрейта, %"
-])
-sheet.append_row([
-    today,
-    str(btc_avg),
-    difficulty,
-    hashrate,
-    str(attracted_percent)
-])
+labels3 = ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"]
+data3 = [150, 22500, "", "1%", "1.8%"]
 
-# Добавляем вторую строку заголовков и значений
-sheet.append_row([
-    "Количество майнеров",
-    "Стоковый хешрейт, Th",
-    "Привлеченный Хешрейт, Th",
-    "Распределение"
-])
-sheet.append_row([
-    str(num_miners),
-    str(stock_hashrate),
-    str(attracted_hashrate),
-    distribution
-])
+labels4 = ["", "", "", "1725", "3105"]
+labels5 = ["Коэфф. прироста", "Суммарный хешрейт", "", "Доход за 30 дней, BTC", "Тут будут данные"]
+data5 = ["15%", 172500, "", "", ""]
+data6 = ["Полезный хешрейт, Th", "167670", "Доход за 30 дней, USDT", "Тут будут данные", "Тут будут данные"]
 
-# Форматирование
-row_count = len(sheet.get_all_values())
-empty_row_index = row_count - 5
-header1_index = row_count - 4
-data1_index = row_count - 3
-header2_index = row_count - 2
-data2_index = row_count - 1
+# Очередь на добавление
+rows = [labels1, data1, labels2, data2, labels3, data3, labels4, labels5, data5, data6]
 
-requests_body = {
-    "requests": [
-        {
-            "repeatCell": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": header1_index,
-                    "endRowIndex": header1_index + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": 5
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
-                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}, "bold": True}
-                    }
-                },
-                "fields": "userEnteredFormat(backgroundColor,textFormat)"
-            }
-        },
-        {
-            "repeatCell": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": data1_index,
-                    "endRowIndex": data1_index + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": 5
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85},
-                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
-                    }
-                },
-                "fields": "userEnteredFormat(backgroundColor,textFormat)"
-            }
-        },
-        {
-            "repeatCell": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": header2_index,
-                    "endRowIndex": header2_index + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": 4
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
-                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}, "bold": True}
-                    }
-                },
-                "fields": "userEnteredFormat(backgroundColor,textFormat)"
-            }
-        },
-        {
-            "repeatCell": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": data2_index,
-                    "endRowIndex": data2_index + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": 4
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85},
-                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
-                    }
-                },
-                "fields": "userEnteredFormat(backgroundColor,textFormat)"
-            }
-        }
-    ]
-}
+# Добавляем строки в таблицу
+for row in rows:
+    sheet.append_row(row)
 
-service.spreadsheets().batchUpdate(
-    spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
-    body=requests_body
-).execute()
-
-print(f"✅ Данные за {today} добавлены и оформлены.")
-
+# Telegram уведомление
 send_telegram_message(
     f"✅ Таблица обновлена: {today}\n"
     f"Средний курс BTC (USD): {btc_avg}\n"
     f"Сложность: {difficulty}\n"
     f"Хешрейт: {hashrate}\n"
-    f"Доля привлеченного хешрейта: {attracted_percent}%\n"
-    f"Ссылка: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
+    f"Ссылка на таблицу: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
 )
+
+print(f"✅ Данные за {today} добавлены и оформлены.")
