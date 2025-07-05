@@ -13,12 +13,7 @@ creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", sco
 client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 
-# Авторизация Google Sheets API
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
-service = build("sheets", "v4", credentials=credentials)
-
-# Telegram-уведомление
+# Telegram уведомление
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -36,12 +31,12 @@ def send_telegram_message(text):
     except Exception as e:
         print(f"❌ Telegram исключение: {e}")
 
-# Получение даты в Молдове
+# Текущая дата (Молдова)
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     return datetime.datetime.now(tz).strftime("%d.%m.%Y")
 
-# Получение цены BTC
+# Курсы BTC
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -56,12 +51,12 @@ def get_coingecko_price():
     except:
         return None
 
-# Получение сложности и хешрейта
+# Получение сложности и общего хешрейта
 def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
         hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
-        return round(diff, 2), round(hashrate)
+        return round(diff, 2), round(hashrate)  # hashrate в GH/s
     except:
         return "N/A", "N/A"
 
@@ -70,40 +65,47 @@ try:
     today = get_today_moldova()
     prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
     btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
-    difficulty, hashrate = get_difficulty_and_hashrate()
+    difficulty, hashrate = get_difficulty_and_hashrate()  # hashrate в GH/s
 
-    stock_hashrate = 150000
-    attracted_hashrate = 172500
+    if hashrate == "N/A":
+        raise ValueError("Не удалось получить общий хешрейт")
+
+    # Приведем GH/s к TH/s
+    network_hashrate_ths = hashrate / 1000  # TH/s
+
+    # Хардкодные данные
+    stock_hashrate = 150000  # TH/s
+    attracted_hashrate = 172500  # TH/s
     total_hashrate = stock_hashrate + attracted_hashrate
-    attracted_share_percent = round(attracted_hashrate / total_hashrate * 100, 2)
+    attracted_percent_of_network = round(attracted_hashrate / network_hashrate_ths * 100, 2)
 
     # Данные для вставки
     new_rows = [
-        [ "Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %" ],
-        [ str(today), str(btc_avg), str(difficulty), str(total_hashrate), str(attracted_share_percent) ],
+        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт (из сети)", "Доля привлеченного хешрейта, %"],
+        [str(today), str(btc_avg), str(difficulty), str(round(network_hashrate_ths)), str(attracted_percent_of_network)],
 
-        [ "Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению" ],
-        [ "1000", str(stock_hashrate), str(attracted_hashrate), "2.80%", "4830" ],
+        ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
+        ["1000", str(stock_hashrate), str(attracted_hashrate), "2.80%", "4830"],
 
-        [ "Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик" ],
-        [ "150", "22500", "", "1%", "1.8%" ],
+        ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"],
+        ["150", "22500", "", "1%", "1.8%"],
 
-        [ "Коэфф. прироста", "Суммарный хешрейт", "", "Доход за 30 дней, BTC", "Доход за 30 дней, BTC" ],
-        [ "15%", str(total_hashrate), "", "0.02573522", "0.04632340" ],
+        ["Коэфф. прироста", "Суммарный хешрейт", "", "Доход за 30 дней, BTC", "Доход за 30 дней, BTC"],
+        ["15%", str(total_hashrate), "", "0.02573522", "0.04632340"],
 
-        [ "Полезный хешрейт, Th", "167670", "Доход за 30 дней, USDT", "2702.20", "4863.96" ]
+        ["Полезный хешрейт, Th", "167670", "Доход за 30 дней, USDT", "2702.20", "4863.96"]
     ]
 
     # Вставляем строки в конец таблицы
     for row in new_rows:
         sheet.append_row(row, value_input_option="USER_ENTERED")
 
-    # Telegram
+    # Telegram уведомление
     send_telegram_message(
         f"✅ Таблица обновлена: {today}\n"
         f"Средний курс BTC: {btc_avg}\n"
         f"Сложность: {difficulty}\n"
-        f"Хешрейт: {total_hashrate} Th/s\n"
+        f"Хешрейт сети: {round(network_hashrate_ths)} TH/s\n"
         f"<a href='https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit'>Открыть таблицу</a>"
     )
 
