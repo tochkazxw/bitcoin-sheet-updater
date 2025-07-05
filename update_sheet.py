@@ -122,7 +122,7 @@ try:
         except Exception as e:
             print("⚠️ Ошибка чтения предыдущей таблицы:", e)
 
-    tsotah = round(attracted_hashrate / hasrate * 100, 2)
+    tsotah = round(attracted_hashrate / hashrate * 100, 2)
 
     values = [
         ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт, Th", "Доля привлеченного хешрейта, %"],
