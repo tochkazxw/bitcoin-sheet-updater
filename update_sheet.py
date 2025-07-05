@@ -73,13 +73,19 @@ try:
     btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
     difficulty, hashrate = get_difficulty_and_hashrate()
 
+    # Хешрейты
+    stock_hashrate = 150000
+    attracted_hashrate = 172500
+    total_hashrate = stock_hashrate + attracted_hashrate
+    attracted_share_percent = round(attracted_hashrate / total_hashrate * 100, 2)
+
     # Данные в таблицу
     values = [
-        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт"],
-        [today, btc_avg, difficulty, hashrate],
+        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"],
+        [today, btc_avg, difficulty, total_hashrate, attracted_share_percent],
 
         ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение"],
-        [1000, 150000, 172500, "2.80%"],
+        [1000, stock_hashrate, attracted_hashrate, "2.80%"],
 
         ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"],
         [150, 22500, "", "1%", "1.8%"],
@@ -87,9 +93,9 @@ try:
         ["", "", "", 1725, 3105],
 
         ["Коэфф. прироста", "Суммарный хешрейт", "", "Доход за 30 дней, BTC", ""],
-        ["15%", 172500, "", "", ""],
+        ["15%", total_hashrate, "", "", ""],
 
-        ["Полезный хешрейт, Th", 167670, "Доход за 30 дней, USDT", "", ""]
+        ["Полезный хешрейт, Th", int(total_hashrate * 0.972), "Доход за 30 дней, USDT", "", ""]
     ]
 
     # Очистка таблицы и вставка новых данных
@@ -101,7 +107,7 @@ try:
         f"✅ Таблица обновлена: {today}\n"
         f"Средний курс BTC: {btc_avg}\n"
         f"Сложность: {difficulty}\n"
-        f"Хешрейт: {hashrate} Th/s\n"
+        f"Хешрейт: {total_hashrate} Th/s\n"
         f"<a href='https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit'>Ссылка на таблицу</a>"
     )
 
