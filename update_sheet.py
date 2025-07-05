@@ -159,7 +159,7 @@ try:
             usdt_income_dev = safe_float(previous_table[6][4], usdt_income_dev)
 
 
-            tsotah = round(attracted_hashrate / hashrate * 100, 2)
+  
 
         except Exception as e:
             print(f"❌ Ошибка чтения данных из предыдущей таблицы: {e}")
