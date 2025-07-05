@@ -7,12 +7,15 @@ from decimal import Decimal
 import os
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+import socket
+import time
 
 # Конфигурация
 SPREADSHEET_ID = "1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU"
 CREDENTIALS_FILE = "credentials.json"
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+MAX_RETRIES = 3  # Максимальное количество попыток для API запросов
 
 def init_google_sheets():
     try:
@@ -36,37 +39,65 @@ def get_current_date():
     tz = pytz.timezone('Europe/Chisinau')
     return datetime.datetime.now(tz).strftime("%d.%m.%y")
 
+def safe_api_request(url, parser, retries=MAX_RETRIES):
+    for attempt in range(retries):
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            return parser(response)
+        except (requests.exceptions.RequestException, socket.gaierror) as e:
+            print(f"Попытка {attempt + 1} из {retries} не удалась для {url}: {e}")
+            if attempt < retries - 1:
+                time.sleep(2)  # Задержка перед повторной попыткой
+    return None
+
 def get_btc_price():
     apis = [
-        {"name": "CoinDesk", "url": "https://api.coindesk.com/v1/bpi/currentprice.json",
-         "parser": lambda r: float(r.json()["bpi"]["USD"]["rate_float"])},
-        {"name": "CoinGecko", "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-         "parser": lambda r: float(r.json()["bitcoin"]["usd"])}
+        {
+            "name": "CoinGecko",
+            "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+            "parser": lambda r: float(r.json()["bitcoin"]["usd"])
+        },
+        {
+            "name": "Alternative.me",
+            "url": "https://api.alternative.me/v2/ticker/bitcoin/",
+            "parser": lambda r: float(r.json()["data"]["1"]["quotes"]["USD"]["price"])
+        }
     ]
     
     prices = []
     for api in apis:
-        try:
-            response = requests.get(api["url"], timeout=10)
-            response.raise_for_status()
-            prices.append(api["parser"](response))
-        except Exception as e:
-            print(f"Ошибка при запросе к {api['name']}: {e}")
+        price = safe_api_request(api["url"], api["parser"])
+        if price is not None:
+            prices.append(price)
+            print(f"Успешно получен курс от {api['name']}")
     
     return round(sum(prices) / len(prices), 2) if prices else None
 
 def get_difficulty_and_hashrate():
     try:
-        difficulty = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
-        hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
-        return f"{difficulty:.2E}", f"{hashrate/1e12:,.0f}"
+        # Альтернативный источник данных о сложности
+        def parse_blockchain_info(response):
+            data = response.json()
+            return str(data["difficulty"]), str(int(data["hashrate"]))
+        
+        result = safe_api_request(
+            "https://blockchain.info/q/getdifficulty,hashrate?format=json",
+            parse_blockchain_info
+        )
+        if result:
+            difficulty, hashrate = result
+            return f"{float(difficulty):.2E}", f"{float(hashrate)/1e12:,.0f}"
     except Exception as e:
         print(f"Ошибка при получении сложности и хешрейта: {e}")
-        return "N/A", "N/A"
+    
+    return "N/A", "N/A"
 
-def calculate_values(btc_price, hashrate):
+def calculate_values(btc_price, difficulty_str, hashrate_str):
     try:
-        hashrate = float(hashrate.replace(',', '')) if hashrate != "N/A" else 0
+        # Преобразуем строковые значения в числа
+        difficulty = float(difficulty_str.split('E')[0]) * (10 ** int(difficulty_str.split('E')[1])) if 'E' in difficulty_str else float(difficulty_str)
+        hashrate = float(hashrate_str.replace(',', '')) if hashrate_str != "N/A" else 0
         
         # Основные параметры
         miners = 1000
@@ -82,7 +113,7 @@ def calculate_values(btc_price, hashrate):
         partner_percent = 0.01
         dev_percent = 0.018
         
-        partner_btc = (30*86400*3.125*attracted_hashrate*1e12)/(float(difficulty.split('E')[0])*(10**int(difficulty.split('E')[1]))*4294967296)
+        partner_btc = (30*86400*3.125*attracted_hashrate*1e12)/(difficulty*4294967296)
         dev_btc = partner_btc * (dev_percent/partner_percent)
         
         partner_usdt = partner_btc * btc_price
@@ -123,13 +154,15 @@ def update_spreadsheet():
         btc_price = get_btc_price()
         difficulty, hashrate = get_difficulty_and_hashrate()
         
-        if not btc_price:
+        if btc_price is None:
             raise ValueError("Не удалось получить курс BTC")
+        if difficulty == "N/A" or hashrate == "N/A":
+            raise ValueError("Не удалось получить данные о сложности или хешрейте")
         
         # Вычисляем производные значения
-        calculated = calculate_values(btc_price, hashrate)
+        calculated = calculate_values(btc_price, difficulty, hashrate)
         if not calculated:
-            raise ValueError("Ошибка в расчетах")
+            raise ValueError("Ошибка в расчетах производных значений")
         
         # Подготавливаем данные для вставки
         values = [
@@ -150,7 +183,6 @@ def update_spreadsheet():
         
         # Форматирование
         requests = [
-            # Жирные заголовки
             {
                 "repeatCell": {
                     "range": {"startRowIndex": 0, "endRowIndex": 1},
@@ -158,7 +190,6 @@ def update_spreadsheet():
                     "fields": "userEnteredFormat.textFormat.bold"
                 }
             },
-            # Границы
             {
                 "updateBorders": {
                     "range": {"startRowIndex": 0, "endRowIndex": 9, "startColumnIndex": 0, "endColumnIndex": 5},
