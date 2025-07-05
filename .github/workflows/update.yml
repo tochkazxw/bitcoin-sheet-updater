@@ -2,9 +2,9 @@ name: Update Bitcoin Sheet
 
 on:
   schedule:
-    - cron: '40 8 * * *'   # 09:40 по UTC = 12:40 по Молдове (UTC+3)
-    - cron: '0 15 * * *'   # 15:00 по UTC = 18:00 по Молдове
-  workflow_dispatch:        # запуск вручную по кнопке
+    - cron: '40 8 * * *'   # 9:00 Молдова (UTC+3)
+    - cron: '0 15 * * *'  # 18:00 Молдова (UTC+3)
+  workflow_dispatch:        # запуск вручную
 
 jobs:
   update-sheet:
@@ -22,16 +22,16 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install gspread oauth2client requests pytz google-api-python-client google-auth
+          pip install gspread oauth2client requests beautifulsoup4 pytz google-api-python-client google-auth
 
       - name: Write credentials.json
         run: |
-          echo "${{ secrets.GOOGLE_CREDENTIALS }}" > credentials.json
+          printf '%s' "$GOOGLE_CREDENTIALS" > credentials.json
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
 
       - name: Run update script
-        run: python update_sheet.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python update_sheet.py
