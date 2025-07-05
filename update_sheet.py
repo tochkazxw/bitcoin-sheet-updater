@@ -41,7 +41,7 @@ def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     return datetime.datetime.now(tz).strftime("%d.%m.%Y")
 
-# Расширенная функция получения курса BTC из нескольких источников
+# Обновленная функция получения курса BTC из двух быстрых источников
 def get_btc_price():
     sources = [
         {
@@ -54,62 +54,46 @@ def get_btc_price():
             "url": "https://api.coindesk.com/v1/bpi/currentprice.json",
             "parser": lambda r: float(r.json()["bpi"]["USD"]["rate_float"])
         },
-        {
-            "name": "Binance",
-            "url": "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
-            "parser": lambda r: float(r.json()["price"])
-        },
-        {
-            "name": "Kraken",
-            "url": "https://api.kraken.com/0/public/Ticker?pair=XBTUSD",
-            "parser": lambda r: float(r.json()["result"]["XXBTZUSD"]["c"][0])
-        }
     ]
     
     for source in sources:
         try:
-            response = requests.get(source["url"], timeout=10)
+            response = requests.get(source["url"], timeout=3)
             response.raise_for_status()
             price = source["parser"](response)
-            print(f"Цена BTC от {source['name']}: {price}")
+            print(f"Курс BTC от {source['name']}: {price}")
             return price
         except Exception as e:
             print(f"Ошибка получения курса от {source['name']}: {e}")
-    
-    print("Не удалось получить курс BTC с всех источников.")
+    print("Не удалось получить курс BTC с доступных источников.")
     return None
 
-# Получение сложности и хешрейта из blockchain.info (без округлений, как есть)
+# Получение сложности и хешрейта с blockchain.info
 def get_difficulty_and_hashrate():
     try:
         diff = requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text.strip()
-        hashrate = requests.get("https://blockchain.info/q/hashrate", timeout=10).text.strip()  # В хешах в секунду
-        return diff, hashrate
+        hashrate = requests.get("https://blockchain.info/q/hashrate", timeout=10).text.strip()
+        return diff, hashrate  # как строки, без преобразований
     except Exception as e:
         print(f"Ошибка получения сложности и хешрейта: {e}")
         return "N/A", "N/A"
 
+# Основная логика
 try:
     today = get_today_moldova()
     btc_price = get_btc_price()
-    if btc_price is None:
-        btc_price = "N/A"
     difficulty, hashrate = get_difficulty_and_hashrate()
 
-    # Конвертация общего хешрейта из хешей в секунду (hashrate) в TH/s
-    try:
-        total_hashrate_th = int(hashrate) / 1_000_000_000_000  # конвертация в TeraHash/s
-    except:
-        total_hashrate_th = "N/A"
-
-    # Примерные значения для хешрейта и других параметров, как у тебя было
+    # Доля привлеченного хешрейта (пример)
     stock_hashrate = 150000
     attracted_hashrate = 172500
-    attracted_share_percent = round(attracted_hashrate / (stock_hashrate + attracted_hashrate) * 100, 2)
+    total_hashrate = stock_hashrate + attracted_hashrate
+    attracted_share_percent = round(attracted_hashrate / total_hashrate * 100, 2)
 
+    # Данные для вставки
     values = [
-        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт (Th/s)", "Доля привлеченного хешрейта, %"],
-        [today, btc_price, difficulty, total_hashrate_th, attracted_share_percent],
+        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"],
+        [today, btc_price if btc_price is not None else "N/A", difficulty, hashrate, attracted_share_percent],
 
         ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
         [1000, stock_hashrate, attracted_hashrate, "2.80%", 4830],
@@ -118,21 +102,27 @@ try:
         [150, 22500, "", "1%", "1.8%"],
 
         ["Коэфф. прироста", "Суммарный хешрейт", "", 1725, 3105],
-        ["15%", 172500, "Доход за 30 дней, BTC", 0.02573522, 0.04632340],
+        ["15%", 172500, "Доход за 30 дней, BTC", 0.02573522, 0.04632340 ],
 
         ["Полезный хешрейт, Th", 167670, "Доход за 30 дней, USDT", 2702.2, 4863.96]
     ]
 
-    # Добавляем строки в конец таблицы (не затирая старые)
-    sheet.append_rows(values, value_input_option="USER_ENTERED")
+    # Добавляем новую таблицу под последней существующей
+    existing_values = sheet.get_all_values()
+    start_row = len(existing_values) + 2  # пустая строка между таблицами
+    
+    cell_range = f"A{start_row}"
+    sheet.update(cell_range, values)
 
+    # Telegram уведомление
     send_telegram_message(
         f"✅ Таблица обновлена: {today}\n"
-        f"Средний курс BTC: {btc_price}\n"
+        f"Средний курс BTC: {btc_price if btc_price is not None else 'N/A'}\n"
         f"Сложность: {difficulty}\n"
-        f"Общий хешрейт: {total_hashrate_th} Th/s\n"
+        f"Хешрейт: {hashrate}\n"
         f"<a href='https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit'>Ссылка на таблицу</a>"
     )
+
     print("✅ Обновление завершено.")
 
 except Exception as e:
