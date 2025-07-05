@@ -61,18 +61,12 @@ def get_difficulty_and_hashrate():
         hashrate_resp = requests.get("https://blockchain.info/q/hashrate", timeout=10)
 
         diff_str = diff_resp.text.strip()
-        hashrate_str = hashrate_resp.text.strip()
-
-        # Сложность без экспоненты
         difficulty = diff_str if 'e' not in diff_str.lower() else f"{float(diff_str):.0f}"
 
-        # Хешрейт — берем первые 9 цифр без ведущих нулей
-        digits = ''.join(filter(str.isdigit, hashrate_str)).lstrip('0')
-        if len(digits) > 9:
-            digits = digits[:9]
-        hashrate_9digits = int(digits) if digits else 0
+        hashrate_ghs = float(hashrate_resp.text.strip())
+        hashrate_ths = int(hashrate_ghs / 1000)
 
-        return difficulty, hashrate_9digits
+        return difficulty, hashrate_ths
     except Exception as e:
         print(f"Ошибка получения сложности и хешрейта: {e}")
         return "N/A", "N/A"
@@ -102,7 +96,7 @@ try:
             prices.append(price)
     btc_avg = round(sum(prices)/len(prices), 2) if prices else "N/A"
 
-    difficulty, hashrate_9digits = get_difficulty_and_hashrate()
+    difficulty, hashrate = get_difficulty_and_hashrate()
 
     miners = read_previous_miners()
 
@@ -112,8 +106,8 @@ try:
     attracted_share_percent = round(attracted_hashrate / total_hashrate * 100, 2)
 
     values = [
-        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"],
-        [today, btc_avg, difficulty, hashrate_9digits, attracted_share_percent],
+        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт, Th", "Доля привлеченного хешрейта, %"],
+        [today, btc_avg, difficulty, hashrate, attracted_share_percent],
 
         ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
         [miners, stock_hashrate, attracted_hashrate, "2.80%", 4830],
@@ -137,7 +131,7 @@ try:
         f"✅ Таблица обновлена: {today}\n"
         f"Средний курс BTC: {btc_avg}\n"
         f"Сложность: {difficulty}\n"
-        f"Хешрейт: {total_hashrate}\n"
+        f"Хешрейт: {total_hashrate} Th/s\n"
         f"<a href='https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit'>Ссылка на таблицу</a>"
     )
 
