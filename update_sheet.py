@@ -6,7 +6,6 @@ import pytz
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import os
-import time
 
 # Авторизация gspread
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -79,14 +78,12 @@ def get_difficulty_and_hashrate():
         return "N/A", "N/A"
 
 def read_previous_miners():
-    # Читаем количество майнеров из таблицы, если есть, чтобы сохранить пользовательские правки
     try:
-        # Ищем в столбце A строку с "Кол-во майнеров"
         col_a = sheet.col_values(1)
         for idx, val in enumerate(col_a):
             if val == "Кол-во майнеров":
-                row_num = idx + 1  # индексация с 1
-                miners_cell = sheet.cell(row_num + 1, 1).value  # ячейка под "Кол-во майнеров"
+                row_num = idx + 1
+                miners_cell = sheet.cell(row_num + 1, 1).value
                 if miners_cell and miners_cell.isdigit():
                     return int(miners_cell)
                 break
@@ -105,20 +102,18 @@ try:
             prices.append(price)
     btc_avg = round(sum(prices)/len(prices), 2) if prices else "N/A"
 
-    difficulty, hashrate = get_difficulty_and_hashrate()
+    difficulty, hashrate_9digits = get_difficulty_and_hashrate()
 
     miners = read_previous_miners()
 
-    # Используем фиксированные значения, кроме miners:
-    stock_hashrate = 150 * miners  # средний хешрейт на майнер * количество майнеров
-    attracted_hashrate = int(stock_hashrate * 1.15)  # +15% прирост привлеченного хешрейта
+    stock_hashrate = 150 * miners
+    attracted_hashrate = int(stock_hashrate * 1.15)
     total_hashrate = stock_hashrate + attracted_hashrate
     attracted_share_percent = round(attracted_hashrate / total_hashrate * 100, 2)
 
-    # Данные для записи
     values = [
         ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт", "Доля привлеченного хешрейта, %"],
-        [today, btc_avg, difficulty, total_hashrate, attracted_share_percent],
+        [today, btc_avg, difficulty, hashrate_9digits, attracted_share_percent],
 
         ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
         [miners, stock_hashrate, attracted_hashrate, "2.80%", 4830],
@@ -132,15 +127,12 @@ try:
         ["Полезный хешрейт, Th", total_hashrate - int(total_hashrate * 0.028), "Доход за 30 дней, USDT", 2702.2, 4863.96]
     ]
 
-    # Добавляем новую таблицу **вниз**, после последней заполненной строки
     last_row = len(sheet.get_all_values())
-    start_row = last_row + 2  # оставляем пустую строку для разделения
+    start_row = last_row + 2
 
-    # Записываем построчно, начиная со start_row и колонки A
     for i, row in enumerate(values):
         sheet.insert_row(row, start_row + i)
 
-    # Отправляем уведомление в Telegram
     send_telegram_message(
         f"✅ Таблица обновлена: {today}\n"
         f"Средний курс BTC: {btc_avg}\n"
