@@ -8,109 +8,163 @@ import os
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# --- Авторизация ---
-scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-client = gspread.authorize(creds)
-sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
+# --- Конфигурация ---
+SPREADSHEET_ID = "1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU"
+CREDENTIALS_FILE = "credentials.json"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# --- Google Sheets API ---
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
-service = build("sheets", "v4", credentials=credentials)
-
-# --- Telegram ---
-def send_telegram_message(text):
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
-        return
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+# --- Инициализация клиента Google Sheets ---
+def init_google_sheets():
     try:
-        requests.post(url, data=payload, timeout=10)
+        scope = ["https://www.googleapis.com/auth/spreadsheets", 
+                "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+        
+        # Инициализация Google API
+        SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+        credentials = service_account.Credentials.from_service_account_file(
+            CREDENTIALS_FILE, scopes=SCOPES)
+        service = build("sheets", "v4", credentials=credentials)
+        
+        return sheet, service
     except Exception as e:
-        print(f"Telegram error: {e}")
+        print(f"Ошибка инициализации Google Sheets: {e}")
+        raise
 
-# --- Дата ---
-def get_today_moldova():
+# --- Telegram уведомления ---
+def send_telegram_message(text):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Telegram токен или chat ID не настроены")
+        return
+        
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"Ошибка отправки в Telegram: {e}")
+
+# --- Получение данных ---
+def get_current_date():
     tz = pytz.timezone('Europe/Chisinau')
-    now = datetime.datetime.now(tz)
-    return now.strftime("%d.%m.%Y")
+    return datetime.datetime.now(tz).strftime("%d.%m.%Y")
 
-# --- Курс BTC ---
 def get_btc_price():
     apis = [
-        ("CoinDesk", "https://api.coindesk.com/v1/bpi/currentprice.json", lambda r: float(r.json()["bpi"]["USD"]["rate_float"])),
-        ("CoinGecko", "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", lambda r: float(r.json()["bitcoin"]["usd"]))
+        {
+            "name": "CoinDesk",
+            "url": "https://api.coindesk.com/v1/bpi/currentprice.json",
+            "parser": lambda r: float(r.json()["bpi"]["USD"]["rate_float"])
+        },
+        {
+            "name": "CoinGecko",
+            "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+            "parser": lambda r: float(r.json()["bitcoin"]["usd"])
+        }
     ]
+    
     prices = []
-    for name, url, parser in apis:
+    for api in apis:
         try:
-            r = requests.get(url, timeout=10)
-            r.raise_for_status()
-            prices.append(parser(r))
+            response = requests.get(api["url"], timeout=10)
+            response.raise_for_status()
+            prices.append(api["parser"](response))
+            print(f"Успешно получен курс от {api['name']}")
         except Exception as e:
-            print(f"{name} API error: {e}")
-    return round(sum(prices) / len(prices), 2) if prices else None
+            print(f"Ошибка при запросе к {api['name']}: {e}")
+    
+    if not prices:
+        raise ValueError("Не удалось получить курс BTC ни от одного источника")
+    
+    return round(sum(prices) / len(prices), 2)
 
-# --- Сложность и хешрейт ---
 def get_difficulty_and_hashrate():
     try:
         difficulty = requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text
         hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
         return format(Decimal(difficulty), 'f'), str(int(hashrate))
     except Exception as e:
-        print(f"Blockchain.info error: {e}")
+        print(f"Ошибка при получении сложности и хешрейта: {e}")
         return "N/A", "N/A"
 
-# --- Основные данные ---
-today = get_today_moldova()
-btc_avg = get_btc_price()
-difficulty, hashrate = get_difficulty_and_hashrate()
+# --- Основная логика ---
+def main():
+    try:
+        # Инициализация
+        sheet, service = init_google_sheets()
+        
+        # Получение данных
+        today = get_current_date()
+        btc_price = get_btc_price()
+        difficulty, hashrate = get_difficulty_and_hashrate()
+        
+        print(f"Данные получены: {today}, BTC={btc_price}, сложность={difficulty}, хешрейт={hashrate}")
+        
+        # Определение строки для вставки
+        all_values = sheet.get_all_values()
+        insert_row = len(all_values) + 1
+        
+        # Подготовка данных
+        values = [
+            [today, btc_price, difficulty, hashrate, "=0.028"],
+            ["=1000", "=150", f"=A{insert_row+1}*B{insert_row+1}", 
+             f"=C{insert_row+2}*0.15", f"=C{insert_row+2}+D{insert_row+2}"],
+            [f"=E{insert_row+2}-E{insert_row+2}*E{insert_row}", 
+             f"=C{insert_row+2}+D{insert_row+2}", 
+             f"=B{insert_row+3}*E{insert_row}", 
+             f"=B{insert_row+3}*0.01", 
+             f"=B{insert_row+3}*0.018"],
+            ["", "", 
+             f"=(30*86400*3.125*C{insert_row+3}*1E12)/(C{insert_row}*4294967296)", 
+             f"=(30*86400*3.125*D{insert_row+3}*1E12)/(C{insert_row}*4294967296)", 
+             ""],
+            ["", "", 
+             f"=C{insert_row+4}*B{insert_row}", 
+             f"=D{insert_row+4}*B{insert_row}", 
+             ""]
+        ]
+        
+        # Вставка данных
+        range_name = f"A{insert_row}:E{insert_row + len(values) - 1}"
+        print(f"Вставляем данные в диапазон: {range_name}")
+        
+        body = {
+            "values": values
+        }
+        
+        result = service.spreadsheets().values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range=range_name,
+            valueInputOption="USER_ENTERED",
+            body=body
+        ).execute()
+        
+        print(f"Обновлено {result.get('updatedCells')} ячеек")
+        
+        # Отправка уведомления
+        message = (
+            f"✅ Таблица успешно обновлена\n"
+            f"Дата: {today}\n"
+            f"Курс BTC: ${btc_price}\n"
+            f"Сложность: {difficulty}\n"
+            f"Хешрейт: {hashrate} Th/s\n"
+            f"Ссылка: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit"
+        )
+        send_telegram_message(message)
+        
+    except Exception as e:
+        error_msg = f"❌ Ошибка при обновлении таблицы: {str(e)}"
+        print(error_msg)
+        send_telegram_message(error_msg)
+        raise
 
-if not btc_avg:
-    send_telegram_message("⚠️ Не удалось получить курс BTC!")
-    exit(1)
-
-# --- Найти первую свободную строку ---
-all_rows = sheet.get_all_values()
-r = len(all_rows) + 1
-
-# --- Формулы и данные ---
-values = [
-    [today, btc_avg, difficulty, hashrate, "=0.028"],
-    ["=1000", "=150", f"=A{r+1}*B{r+1}", f"=C{r+2}*0.15", f"=C{r+2}+D{r+2}"],
-    [f"=E{r+2}-E{r+2}*E{r}", f"=C{r+2}+D{r+2}", f"=B{r+3}*E{r}", f"=B{r+3}*0.01", f"=B{r+3}*0.018"],
-    ["", "", f"=(30*86400*3.125*C{r+3}*1E12)/(C{r}*4294967296)", f"=(30*86400*3.125*D{r+3}*1E12)/(C{r}*4294967296)", ""],
-    ["", "", f"=C{r+4}*B{r}", f"=D{r+4}*B{r}", ""]
-]
-
-# --- Вставка данных ---
-try:
-    service.spreadsheets().values().update(
-        spreadsheetId=sheet.spreadsheet.id,
-        range=f"A{r}:E{r + len(values) - 1}",
-        valueInputOption="USER_ENTERED",
-        body={"values": values}
-    ).execute()
-
-    # Принудительное обновление формул (опционально)
-    service.spreadsheets().batchUpdate(
-        spreadsheetId=sheet.spreadsheet.id,
-        body={"requests": [{"repeatCell": {
-            "range": {"sheetId": sheet.id},
-            "fields": "userEnteredValue",
-        }}]}
-    ).execute()
-
-    # Уведомление в Telegram
-    send_telegram_message(
-        f"✅ Таблица обновлена: {today}\n"
-        f"BTC: ${btc_avg}\n"
-        f"Сложность: {difficulty}\n"
-        f"Хешрейт: {hashrate} Th/s\n"
-        f"Ссылка: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit"
-    )
-except Exception as e:
-    send_telegram_message(f"❌ Ошибка при обновлении таблицы: {e}")
+if __name__ == "__main__":
+    main()
