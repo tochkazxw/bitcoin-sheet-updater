@@ -3,107 +3,227 @@ from oauth2client.service_account import ServiceAccountCredentials
 import requests
 import datetime
 import pytz
-from decimal import Decimal
-import os
-from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from google.oauth2 import service_account
+import os
 
-# --- Конфигурация ---
-SPREADSHEET_ID = "1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU"
-CREDENTIALS_FILE = "credentials.json"
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+# Авторизация gspread
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+client = gspread.authorize(creds)
+sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
+sheet_id = sheet._properties['sheetId']
 
-# --- Инициализация клиента Google Sheets ---
-def init_google_sheets():
+# Авторизация Google Sheets API для форматирования
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+service = build("sheets", "v4", credentials=credentials)
+
+# Функция отправки сообщения в Telegram
+def send_telegram_message(text):
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        print("⚠️ Не заданы TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID в переменных окружения.")
+        return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
     try:
-        scope = ["https://www.googleapis.com/auth/spreadsheets", 
-                "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTS_FILE, scope)
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
-        
-        SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-        credentials = service_account.Credentials.from_service_account_file(
-            CREDENTS_FILE, scopes=SCOPES)
-        service = build("sheets", "v4", credentials=credentials)
-        
-        return sheet, service
+        resp = requests.post(url, data=payload, timeout=10)
+        if resp.status_code == 200:
+            print("✅ Уведомление в Telegram отправлено.")
+        else:
+            print(f"❌ Ошибка отправки уведомления в Telegram: {resp.text}")
     except Exception as e:
-        print(f"Ошибка инициализации Google Sheets: {e}")
-        raise
+        print(f"❌ Исключение при отправке Telegram уведомления: {e}")
 
-# --- Получение данных ---
-def get_current_date():
+# Получить текущую дату в Молдове (дд.мм.гггг)
+def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
-    return datetime.datetime.now(tz).strftime("%d.%m.%Y")
+    now = datetime.datetime.now(tz)
+    return now.strftime("%d.%m.%Y")
 
-def get_btc_price():
-    apis = [
-        {"name": "CoinDesk", "url": "https://api.coindesk.com/v1/bpi/currentprice.json", 
-         "parser": lambda r: float(r.json()["bpi"]["USD"]["rate_float"])},
-        {"name": "CoinGecko", "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", 
-         "parser": lambda r: float(r.json()["bitcoin"]["usd"])}
-    ]
-    
-    prices = []
-    for api in apis:
-        try:
-            response = requests.get(api["url"], timeout=10)
-            response.raise_for_status()
-            prices.append(api["parser"](response))
-        except Exception as e:
-            print(f"Ошибка при запросе к {api['name']}: {e}")
-    
-    return round(sum(prices) / len(prices), 2) if prices else None
+# Получение курса с Coindesk
+def get_coindesk_price():
+    try:
+        r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
+        return float(r.json()["bpi"]["USD"]["rate_float"])
+    except:
+        return None
 
+# Получение курса с Coingecko
+def get_coingecko_price():
+    try:
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
+        return float(r.json()["bitcoin"]["usd"])
+    except:
+        return None
+
+# Получение сложности и хешрейта с blockchain.info
 def get_difficulty_and_hashrate():
     try:
-        difficulty = requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text
+        diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
         hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
-        return format(Decimal(difficulty), 'f'), str(int(hashrate))
-    except Exception as e:
-        print(f"Ошибка при получении сложности и хешрейта: {e}")
+        return f"{diff:.2E}", str(int(hashrate))
+    except:
         return "N/A", "N/A"
 
-# --- Основная функция ---
-def update_spreadsheet():
-    try:
-        sheet, service = init_google_sheets()
-        
-        # Получаем данные
-        today = get_current_date()
-        btc_price = get_btc_price() or 0  # Запасное значение
-        difficulty, hashrate = get_difficulty_and_hashrate()
-        
-        # Очищаем лист перед вставкой новых данных
-        sheet.clear()
-        
-        # Подготавливаем данные с заголовками
-        headers = ["Дата", "Курс BTC", "Сложность", "Хешрейт сети, Th/s", "Распределение %"]
-        data = [
-            [today, btc_price, difficulty, hashrate, "=0.028"],
-            ["=1000", "=150", "=A2*B2", "=C2*0.15", "=C2+D2"],
-            ["=E2-E2*E1", "=C2+D2", "=B3*E1", "=B3*0.01", "=B3*0.018"],
-            ["", "", "=(30*86400*3.125*C3*1E12)/(C1*4294967296)", 
-             "=(30*86400*3.125*D3*1E12)/(C1*4294967296)", ""],
-            ["", "", "=C4*B1", "=D4*B1", ""]
-        ]
-        values = [headers] + data
-        
-        # Вставляем данные
-        service.spreadsheets().values().update(
-            spreadsheetId=SPREADSHEET_ID,
-            range="A1:E5",  # Фиксированный диапазон для первых 5 строк
-            valueInputOption="USER_ENTERED",
-            body={"values": values}
-        ).execute()
-        
-        print("Данные успешно обновлены!")
-        
-    except Exception as e:
-        print(f"Критическая ошибка: {e}")
-        raise
+# Основная логика
 
-if __name__ == "__main__":
-    update_spreadsheet()
+# Получаем значения
+num_miners = 1000
+stock_hashrate = 150000
+attracted_hashrate = 172500
+distribution = "2.80%"
+
+# Получаем данные из API
+
+today = get_today_moldova()
+prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
+btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
+difficulty, hashrate = get_difficulty_and_hashrate()
+
+# Вычисляем долю привлечённого хешрейта
+try:
+    hashrate_float = float(hashrate)
+    attracted_percent = round((attracted_hashrate / hashrate_float) * 100, 2)
+except:
+    attracted_percent = "N/A"
+
+# Добавляем пустую строку
+sheet.append_row([])
+
+# Добавляем заголовки и значения (1 строка)
+sheet.append_row([
+    "Дата",
+    "Средний курс BTC (USD)",
+    "Сложность",
+    "Общий хешрейт сети, Th",
+    "Доля привлеченного хешрейта, %"
+])
+sheet.append_row([
+    today,
+    str(btc_avg),
+    difficulty,
+    hashrate,
+    str(attracted_percent)
+])
+
+# Добавляем вторую строку заголовков и значений
+sheet.append_row([
+    "Количество майнеров",
+    "Стоковый хешрейт, Th",
+    "Привлеченный Хешрейт, Th",
+    "Распределение"
+])
+sheet.append_row([
+    str(num_miners),
+    str(stock_hashrate),
+    str(attracted_hashrate),
+    distribution
+])
+
+# Форматирование
+row_count = len(sheet.get_all_values())
+empty_row_index = row_count - 5
+header1_index = row_count - 4
+data1_index = row_count - 3
+header2_index = row_count - 2
+data2_index = row_count - 1
+
+requests_body = {
+    "requests": [
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": header1_index,
+                    "endRowIndex": header1_index + 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 5
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
+                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}, "bold": True}
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat)"
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": data1_index,
+                    "endRowIndex": data1_index + 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 5
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85},
+                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat)"
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": header2_index,
+                    "endRowIndex": header2_index + 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 4
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
+                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}, "bold": True}
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat)"
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": data2_index,
+                    "endRowIndex": data2_index + 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 4
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85},
+                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat)"
+            }
+        }
+    ]
+}
+
+service.spreadsheets().batchUpdate(
+    spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
+    body=requests_body
+).execute()
+
+print(f"✅ Данные за {today} добавлены и оформлены.")
+
+send_telegram_message(
+    f"✅ Таблица обновлена: {today}\n"
+    f"Средний курс BTC (USD): {btc_avg}\n"
+    f"Сложность: {difficulty}\n"
+    f"Хешрейт: {hashrate}\n"
+    f"Доля привлеченного хешрейта: {attracted_percent}%\n"
+    f"Ссылка: https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit?usp=sharing"
+)
