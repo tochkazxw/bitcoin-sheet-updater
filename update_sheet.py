@@ -74,7 +74,7 @@ def safe_float(val, default=0.0):
     except:
         return default
 
-# --- Авторизация и подключение к Google Sheets ---
+# --- Авторизация Google Sheets ---
 
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
@@ -85,7 +85,7 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
-# --- Функция чтения предыдущей таблицы ---
+# --- Чтение предыдущей таблицы ---
 
 def read_previous_table_values():
     all_values = sheet.get_all_values()
@@ -107,6 +107,8 @@ def read_previous_table_values():
         return all_values[last_table_start:]
     else:
         return all_values[last_table_start:last_table_start + table_length]
+
+# --- Основной блок ---
 
 try:
     today = get_today_moldova()
@@ -139,9 +141,10 @@ try:
     useful_hashrate = 167670
     usdt_30d_income = 2702.2
     usdt_income_dev = 4863.96
-    tsotah = attracted_hashrate // hashrate * 100
+    tsotah = 0
     parthash = 1725
     rabhash = 3105
+
     if previous_table:
         try:
             miners = safe_int(previous_table[2][1], miners)
@@ -164,6 +167,8 @@ try:
             usdt_30d_income = safe_float(previous_table[6][3], usdt_30d_income)
             usdt_income_dev = safe_float(previous_table[6][4], usdt_income_dev)
 
+            tsotah = round(attracted_hashrate / total_hashrate * 100, 2) if total_hashrate else 0
+
         except Exception as e:
             print(f"❌ Ошибка чтения данных из предыдущей таблицы: {e}")
 
@@ -177,7 +182,7 @@ try:
         ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"],
         [avg_hashrate_per_miner, increase_hashrate, "", partner_share, developer_share],
 
-        ["Коэфф. прироста", "Суммарный хешрейт", "", parthash, rabhash ],
+        ["Коэфф. прироста", "Суммарный хешрейт", "", parthash, rabhash],
         [growth_coeff, total_hashrate, "Доход за 30 дней, BTC", btc_30d_income, btc_income_dev],
 
         ["Полезный хешрейт, Th", useful_hashrate, "Доход за 30 дней, USDT", usdt_30d_income, usdt_income_dev]
