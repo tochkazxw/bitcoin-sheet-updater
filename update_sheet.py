@@ -6,119 +6,118 @@ import pytz
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import os
-from decimal import Decimal, ROUND_DOWN
 
-# Авторизация gspread
+# Авторизация
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 
-# Авторизация Google Sheets API (если нужно форматирование — пока не используется)
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
-# Функция отправки Telegram-уведомления
+# Telegram уведомление
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
-        print("⚠️ Не заданы TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID.")
+        print("⚠️ TELEGRAM_BOT_TOKEN или CHAT_ID не указаны")
         return
     try:
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-        r = requests.post(url, data=payload, timeout=10)
-        if r.status_code == 200:
-            print("✅ Уведомление отправлено в Telegram.")
-        else:
-            print(f"❌ Ошибка отправки Telegram: {r.text}")
+        requests.post(url, data=payload, timeout=10)
     except Exception as e:
-        print(f"❌ Telegram исключение: {e}")
+        print(f"Ошибка Telegram: {e}")
 
-# Получение даты в часовом поясе Молдовы
+# Получить дату
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     return datetime.datetime.now(tz).strftime("%d.%m.%Y")
 
-# Курс с CoinDesk
-def get_coindesk_price():
+# Получить цену BTC
+def get_btc_price():
     try:
-        r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
-        return float(r.json()["bpi"]["USD"]["rate_float"])
+        r1 = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
+        r2 = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
+        prices = [float(r1.json()["bpi"]["USD"]["rate_float"]), float(r2.json()["bitcoin"]["usd"])]
+        return round(sum(prices) / len(prices), 2)
     except:
-        return None
+        return "N/A"
 
-# Курс с CoinGecko
-def get_coingecko_price():
-    try:
-        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
-        return float(r.json()["bitcoin"]["usd"])
-    except:
-        return None
-
-# Сложность и хешрейт (в Th/s и без экспоненты)
+# Получить хешрейт и сложность (в полных цифрах)
 def get_difficulty_and_hashrate():
     try:
-        diff_raw = requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text.strip()
-        hashrate_raw = requests.get("https://blockchain.info/q/hashrate", timeout=10).text.strip()
-
-        # Сложность как целое число
-        diff = str(int(Decimal(diff_raw)))
-
-        # Хешрейт: GH/s → Th/s, округление вниз
-        hashrate_th = (Decimal(hashrate_raw) / Decimal('1e3')).quantize(Decimal('1'), rounding=ROUND_DOWN)
-        hashrate_th_str = str(hashrate_th)
-
-        return diff, hashrate_th_str
-    except Exception as e:
-        print(f"Ошибка при получении сложности и хешрейта: {e}")
+        diff = int(float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text))
+        hashrate_raw = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
+        hashrate_th = int(hashrate_raw)  # в Th
+        return diff, hashrate_th
+    except:
         return "N/A", "N/A"
 
-# Основная логика
+# Найти последнюю строку с данными
+def find_last_filled_row():
+    data = sheet.get_all_values()
+    return len(data)
+
+# Получить количество майнеров из последней таблицы
+def get_previous_miners():
+    data = sheet.get_all_values()
+    for i in range(len(data) - 1, -1, -1):
+        if "Кол-во майнеров" in data[i]:
+            try:
+                return int(data[i + 1][0])
+            except:
+                break
+    return 1000  # по умолчанию
+
+# Основной блок
 try:
     today = get_today_moldova()
-    prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
-    btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
+    btc_price = get_btc_price()
     difficulty, hashrate = get_difficulty_and_hashrate()
 
-    stock_hashrate = 150000
-    attracted_hashrate = 172500
+    miners = get_previous_miners()
+    avg_hashrate_per_miner = 150
+    stock_hashrate = miners * avg_hashrate_per_miner
+    growth_rate = 0.15
+    attracted_hashrate = int(stock_hashrate * growth_rate)
     total_hashrate = stock_hashrate + attracted_hashrate
+    distribution = "2.80%"
     attracted_share_percent = round(attracted_hashrate / total_hashrate * 100, 2)
+    useful_hashrate = int(total_hashrate * 0.972)
 
-    # Данные в таблицу
     values = [
-        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт (Th)", "Доля привлеченного хешрейта, %"],
-        [today, btc_avg, difficulty, hashrate, attracted_share_percent],
+        ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт, Th", "Доля привлеченного хешрейта, %"],
+        [today, btc_price, difficulty, hashrate, attracted_share_percent],
 
         ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
-        [1000, stock_hashrate, attracted_hashrate, "2.80%", 4830],
+        [miners, stock_hashrate, attracted_hashrate, distribution, 4830],
 
         ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"],
-        [150, 22500, "", "1%", "1.8%"],
+        [150, attracted_hashrate, "", "1%", "1.8%"],
 
-        ["Коэфф. прироста", "Суммарный хешрейт", "", 1725, 3105],
-        ["15%", 172500, "Доход за 30 дней, BTC", 0.02573522, 0.04632340],
+        ["Коэфф. прироста", "Суммарный хешрейт", "", "Доход за 30 дней, BTC", "Доход за 30 дней, USDT"],
+        ["15%", total_hashrate, "", 0.02573522, 2702.2],
 
-        ["Полезный хешрейт, Th", 167670, "Доход за 30 дней, USDT", 2702.2, 4863.96]
+        ["Полезный хешрейт, Th", useful_hashrate, "", 0.04632340, 4863.96]
     ]
 
-    # Добавить в конец таблицы, не удаляя старое
-    sheet.append_rows(values)
+    # Вставка ниже последней таблицы
+    last_row = find_last_filled_row()
+    sheet.update(f"A{last_row + 2}", values)
 
-    # Telegram уведомление
     send_telegram_message(
         f"✅ Таблица обновлена: {today}\n"
-        f"Средний курс BTC: {btc_avg}\n"
+        f"BTC: {btc_price} USD\n"
         f"Сложность: {difficulty}\n"
-        f"Хешрейт: {hashrate} Th/s\n"
-        f"<a href='https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit'>Ссылка на таблицу</a>"
+        f"Хешрейт сети: {hashrate} Th/s\n"
+        f"<a href='https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit'>Открыть таблицу</a>"
     )
 
-    print("✅ Обновление завершено.")
+    print("✅ Успешно")
 
 except Exception as e:
     print(f"❌ Ошибка: {e}")
-    send_telegram_message(f"❌ Ошибка при обновлении таблицы: {e}")
+    send_telegram_message(f"❌ Ошибка при обновлении: {e}")
