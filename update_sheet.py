@@ -7,6 +7,8 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import os
 
+# --- Вспомогательные функции ---
+
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -60,24 +62,19 @@ def get_difficulty_and_hashrate():
         print(f"Ошибка получения сложности и хешрейта: {e}")
         return "N/A", "N/A"
 
-def find_last_table(sheet, header="Дата", table_rows=11):
-    all_values = sheet.get_all_values()
-    if not all_values:
-        return None, None
+def safe_int(val, default=0):
+    try:
+        return int(str(val).replace(',', '').replace(' ', ''))
+    except:
+        return default
 
-    last_table_start = None
-    for i in reversed(range(len(all_values))):
-        if len(all_values[i]) > 0 and all_values[i][0] == header:
-            last_table_start = i
-            break
+def safe_float(val, default=0.0):
+    try:
+        return float(str(val).replace(',', '.').replace('%', '').strip())
+    except:
+        return default
 
-    if last_table_start is None:
-        return None, None
-
-    table_data = all_values[last_table_start:last_table_start + table_rows]
-    return table_data, last_table_start
-
-# --- Авторизация Google Sheets ---
+# --- Авторизация и подключение к Google Sheets ---
 
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
@@ -88,6 +85,29 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
+# --- Функция чтения предыдущей таблицы ---
+
+def read_previous_table_values():
+    all_values = sheet.get_all_values()
+    if not all_values:
+        return None
+
+    last_table_start = None
+    for i in reversed(range(len(all_values))):
+        if all_values[i] and all_values[i][0] == "Дата":
+            last_table_start = i
+            break
+
+    if last_table_start is None:
+        return None
+
+    table_length = 11
+
+    if last_table_start + table_length > len(all_values):
+        return all_values[last_table_start:]
+    else:
+        return all_values[last_table_start:last_table_start + table_length]
+
 try:
     today = get_today_moldova()
 
@@ -96,61 +116,58 @@ try:
         price = source_func()
         if price is not None:
             prices.append(price)
-    btc_avg = round(sum(prices)/len(prices), 2) if prices else "N/A"
+    btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 
     difficulty, hashrate = get_difficulty_and_hashrate()
 
-    previous_table, start_row = find_last_table(sheet)
+    previous_table = read_previous_table_values()
 
-    # Дефолтные значения, если не нашли предыдущую таблицу
+    # Значения по умолчанию
     miners = 1000
     stock_hashrate = 150000
     attracted_hashrate = 172500
-    total_hashrate = 172500
-    attracted_share_percent = 0.04
-    growth_coeff = 0.15
-    avg_hashrate_per_miner = 150
-    increase_hashrate = attracted_hashrate - stock_hashrate
-    useful_hashrate = total_hashrate - int(total_hashrate * 0.028)
-    btc_30d_income = 0.02573522
-    usdt_30d_income = 2702.2
-    partner_share = 0.01
-    developer_share = 0.018
     distribution = 0.028
     hashrate_distribution_value = 4830
+    avg_hashrate_per_miner = 150
+    increase_hashrate = attracted_hashrate - stock_hashrate
+    partner_share = 0.01
+    developer_share = 0.018
+    growth_coeff = 0.15
+    total_hashrate = stock_hashrate + attracted_hashrate
+    btc_30d_income = 0.02573522
     btc_income_dev = 0.04632340
+    useful_hashrate = total_hashrate - int(total_hashrate * 0.028)
+    usdt_30d_income = 2702.2
     usdt_income_dev = 4863.96
-    some_value_1725 = 1725
-    some_value_3105 = 3105
 
     if previous_table:
         try:
-            miners = int(previous_table[2][1])
-            stock_hashrate = int(previous_table[2][2])
-            attracted_hashrate = int(previous_table[2][3])
-            distribution = float(previous_table[2][4])
-            hashrate_distribution_value = int(previous_table[3][4])
+            miners = safe_int(previous_table[2][1], miners)
+            stock_hashrate = safe_int(previous_table[2][2], stock_hashrate)
+            attracted_hashrate = safe_int(previous_table[2][3], attracted_hashrate)
+            distribution = safe_float(previous_table[2][4], distribution)
+            hashrate_distribution_value = safe_int(previous_table[3][4], hashrate_distribution_value)
 
-            avg_hashrate_per_miner = int(previous_table[4][0])
-            increase_hashrate = int(previous_table[4][1])
-            partner_share = float(previous_table[4][3])
-            developer_share = float(previous_table[4][4])
+            avg_hashrate_per_miner = safe_int(previous_table[4][0], avg_hashrate_per_miner)
+            increase_hashrate = safe_int(previous_table[4][1], increase_hashrate)
+            partner_share = safe_float(previous_table[4][3], partner_share)
+            developer_share = safe_float(previous_table[4][4], developer_share)
 
-            growth_coeff = float(previous_table[5][0])
-            total_hashrate = int(previous_table[5][1])
-            btc_30d_income = float(previous_table[5][3])
-            btc_income_dev = float(previous_table[5][4])
+            growth_coeff = safe_float(previous_table[5][0], growth_coeff)
+            total_hashrate = safe_int(previous_table[5][1], total_hashrate)
+            btc_30d_income = safe_float(previous_table[5][3], btc_30d_income)
+            btc_income_dev = safe_float(previous_table[5][4], btc_income_dev)
 
-            useful_hashrate = int(previous_table[6][1])
-            usdt_30d_income = float(previous_table[6][3])
-            usdt_income_dev = float(previous_table[6][4])
+            useful_hashrate = safe_int(previous_table[6][1], useful_hashrate)
+            usdt_30d_income = safe_float(previous_table[6][3], usdt_30d_income)
+            usdt_income_dev = safe_float(previous_table[6][4], usdt_income_dev)
+
         except Exception as e:
-            print(f"Ошибка чтения данных из предыдущей таблицы: {e}")
+            print(f"❌ Ошибка чтения данных из предыдущей таблицы: {e}")
 
-    # Формируем новую таблицу
     values = [
         ["Дата", "Средний курс BTC", "Сложность", "Общий хешрейт, Th", "Доля привлеченного хешрейта, %"],
-        [today, btc_avg, difficulty, hashrate, attracted_share_percent],
+        [today, btc_avg, difficulty, hashrate, round(attracted_hashrate / total_hashrate * 100, 2) if total_hashrate else 0],
 
         ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
         [miners, stock_hashrate, attracted_hashrate, distribution, hashrate_distribution_value],
@@ -158,17 +175,17 @@ try:
         ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"],
         [avg_hashrate_per_miner, increase_hashrate, "", partner_share, developer_share],
 
-        ["Коэфф. прироста", "Суммарный хешрейт", "", some_value_1725, some_value_3105],
+        ["Коэфф. прироста", "Суммарный хешрейт", "", 1725, 3105],
         [growth_coeff, total_hashrate, "Доход за 30 дней, BTC", btc_30d_income, btc_income_dev],
 
         ["Полезный хешрейт, Th", useful_hashrate, "Доход за 30 дней, USDT", usdt_30d_income, usdt_income_dev]
     ]
 
-    # Вставляем новую таблицу под предыдущей с пустой строкой
-    insert_start_row = start_row + len(previous_table) + 2 if start_row is not None else len(sheet.get_all_values()) + 2
+    last_row = len(sheet.get_all_values())
+    start_row = last_row + 2
 
     for i, row in enumerate(values):
-        sheet.insert_row(row, insert_start_row + i)
+        sheet.insert_row(row, start_row + i)
 
     send_telegram_message(
         f"✅ Таблица обновлена: {today}\n"
