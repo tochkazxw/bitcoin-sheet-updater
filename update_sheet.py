@@ -3,18 +3,20 @@ from oauth2client.service_account import ServiceAccountCredentials
 import requests
 import datetime
 import pytz
-from decimal import Decimal
 import os
+import time
+import socket
+import warnings
+from decimal import Decimal
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-import socket
-import time
-import warnings
+from dotenv import load_dotenv
 
-# Игнорируем предупреждения
+# Загрузка переменных окружения
+load_dotenv()
+
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-# Конфигурация
 SPREADSHEET_ID = "1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU"
 CREDENTIALS_FILE = "credentials.json"
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -23,22 +25,16 @@ MAX_RETRIES = 3
 REQUEST_TIMEOUT = 10
 
 def init_google_sheets():
-    try:
-        scope = ["https://www.googleapis.com/auth/spreadsheets",
-                "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
-        
-        SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-        credentials = service_account.Credentials.from_service_account_file(
-            CREDENTIALS_FILE, scopes=SCOPES)
-        service = build("sheets", "v4", credentials=credentials)
-        
-        return sheet, service
-    except Exception as e:
-        print(f"Ошибка инициализации Google Sheets: {e}")
-        raise
+    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
+    client = gspread.authorize(creds)
+    sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+
+    SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+    credentials = service_account.Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+    service = build("sheets", "v4", credentials=credentials)
+
+    return sheet, service
 
 def get_current_date():
     tz = pytz.timezone('Europe/Chisinau')
@@ -69,7 +65,7 @@ def get_btc_price():
             "parser": lambda r: float(r.json()["data"]["1"]["quotes"]["USD"]["price"])
         }
     ]
-    
+
     prices = []
     for api in apis:
         price = safe_api_request(api["url"], api["parser"])
@@ -80,53 +76,20 @@ def get_btc_price():
     return round(sum(prices) / len(prices), 2) if prices else None
 
 def get_difficulty_and_hashrate():
-    sources = [
-        {
-            "name": "Blockchain.com",
-            "url": "https://api.blockchain.info/stats",
-            "parser": lambda r: (
-                str(r.json()["difficulty"]),
-                str(r.json()["hash_rate"] * 1e12)
-            )
-        },
-        {
-            "name": "Bitaps",
-            "url": "https://api.bitaps.com/btc/v1/blockchain/statistics",
-            "parser": lambda r: (
-                str(r.json()["data"]["difficulty"]),
-                str(r.json()["data"]["hashrate"])
-            )
-        }
-    ]
-
-    for source in sources:
-        try:
-            print(f"Пробуем получить данные от {source['name']}...")
-            response = requests.get(source["url"], timeout=10)
-            response.raise_for_status()
-            difficulty, hashrate = source["parser"](response)
-            
-            if difficulty and hashrate:
-                print(f"Успешно получены данные от {source['name']}")
-                return f"{float(difficulty):.2E}", f"{float(hashrate)/1e12:,.0f}"
-                
-        except Exception as e:
-            print(f"Ошибка при запросе к {source['name']}: {e}")
-            continue
-
-    print("Все API недоступны, используем значения по умолчанию")
-    return "1.17E+14", "965,130"
+    try:
+        # Можно заменить на реальный API
+        difficulty = 1.17e14
+        hashrate = 965130501885  # хешрейт в H/s
+        return f"{difficulty:.2E}", f"{hashrate / 1e12:,.0f}"  # Вернём TH/s
+    except Exception as e:
+        print(f"Ошибка получения сложности и хешрейта: {e}")
+        return "1.17E+14", "965,130"
 
 def calculate_values(btc_price, difficulty_str, hashrate_str):
     try:
-        if 'E' in difficulty_str:
-            base, exponent = difficulty_str.split('E')
-            difficulty = float(base) * (10 ** int(exponent))
-        else:
-            difficulty = float(difficulty_str.replace(',', '')) if difficulty_str != "N/A" else 1.17e14
-        
-        hashrate = float(hashrate_str.replace(',', '')) if hashrate_str != "N/A" else 965130
-        
+        difficulty = float(difficulty_str.replace(',', ''))
+        hashrate = float(hashrate_str.replace(',', ''))
+
         miners = 1000
         avg_hash_per_miner = 150
         stock_hashrate = miners * avg_hash_per_miner
@@ -135,16 +98,16 @@ def calculate_values(btc_price, difficulty_str, hashrate_str):
         total_hashrate = stock_hashrate + attracted_hashrate
         distribution_percent = 0.028
         useful_hashrate = total_hashrate * (1 - distribution_percent)
-        
+
         partner_percent = 0.01
         dev_percent = 0.018
-        
-        partner_btc = (30*86400*3.125*attracted_hashrate*1e12)/(difficulty*4294967296)
-        dev_btc = partner_btc * (dev_percent/partner_percent)
-        
+
+        partner_btc = (30 * 86400 * 3.125 * attracted_hashrate * 1e12) / (difficulty * 4294967296)
+        dev_btc = partner_btc * (dev_percent / partner_percent)
+
         partner_usdt = partner_btc * btc_price
         dev_usdt = dev_btc * btc_price
-        
+
         return {
             "miners": miners,
             "stock_hashrate": f"{stock_hashrate:,.0f}",
@@ -154,7 +117,8 @@ def calculate_values(btc_price, difficulty_str, hashrate_str):
             "partner_btc": f"{partner_btc:.8f}",
             "dev_btc": f"{dev_btc:.8f}",
             "partner_usdt": f"{partner_usdt:,.2f}",
-            "dev_usdt": f"{dev_usdt:,.2f}"
+            "dev_usdt": f"{dev_usdt:,.2f}",
+            "hashrate_to_distribute": f"{useful_hashrate * partner_percent:,.0f}"
         }
     except Exception as e:
         print(f"Ошибка расчетов: {e}")
@@ -163,7 +127,7 @@ def calculate_values(btc_price, difficulty_str, hashrate_str):
 def send_telegram_message(text):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return
-        
+
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}
     try:
@@ -174,56 +138,42 @@ def send_telegram_message(text):
 def update_spreadsheet():
     try:
         sheet, service = init_google_sheets()
-        
         today = get_current_date()
         btc_price = get_btc_price()
         difficulty, hashrate = get_difficulty_and_hashrate()
-        
+
         if btc_price is None:
             raise ValueError("Не удалось получить курс BTC")
-        
+
         calculated = calculate_values(btc_price, difficulty, hashrate)
         if not calculated:
             raise ValueError("Ошибка в расчетах производных значений")
-        
+
         values = [
             ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th", "В привлеченного хешрейта, %"],
             [today, btc_price, difficulty, hashrate, "0.04"],
             ["Количество майнеров", "Стоковый хешрейт, Th", "Привлеченный хешрейт, Th", "Распределение", "Хешрейт к распределению"],
-            [calculated["miners"], calculated["stock_hashrate"], calculated["attracted_hashrate"], "2.80%", "4830"],
+            [calculated["miners"], calculated["stock_hashrate"], calculated["attracted_hashrate"], "2.80%", calculated["hashrate_to_distribute"]],
             ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"],
             ["150", "22500", "", "1.00%", "1.80%"],
             ["Коэфф. прироста", "Суммарный хешрейт", "", calculated["partner_btc"], calculated["dev_btc"]],
             ["15%", calculated["total_hashrate"], "Доход за 30 дней, BTC", "", ""],
             ["Полезный хешрейт, Th", calculated["useful_hashrate"], "Доход за 30 дней, USDT", calculated["partner_usdt"], calculated["dev_usdt"]]
         ]
-        
+
         sheet.clear()
         sheet.update(range_name="A1:E9", values=values)
-        
+
         spreadsheet = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-        sheet_id = None
-        for sheet_prop in spreadsheet['sheets']:
-            if sheet_prop['properties']['title'] == sheet.title:
-                sheet_id = sheet_prop['properties']['sheetId']
-                break
-        
+        sheet_id = next((s['properties']['sheetId'] for s in spreadsheet['sheets'] if s['properties']['title'] == sheet.title), None)
         if sheet_id is None:
-            raise ValueError("Не удалось получить sheetId для форматирования")
-        
-        requests = [
+            raise ValueError("Не удалось получить sheetId")
+
+        formatting_requests = [
             {
                 "repeatCell": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "startRowIndex": 0,
-                        "endRowIndex": 1
-                    },
-                    "cell": {
-                        "userEnteredFormat": {
-                            "textFormat": {"bold": True}
-                        }
-                    },
+                    "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1},
+                    "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
                     "fields": "userEnteredFormat.textFormat.bold"
                 }
             },
@@ -245,12 +195,9 @@ def update_spreadsheet():
                 }
             }
         ]
-        
-        service.spreadsheets().batchUpdate(
-            spreadsheetId=SPREADSHEET_ID,
-            body={"requests": requests}
-        ).execute()
-        
+
+        service.spreadsheets().batchUpdate(spreadsheetId=SPREADSHEET_ID, body={"requests": formatting_requests}).execute()
+
         message = (
             f"✅ Таблица успешно обновлена\n"
             f"Дата: {today}\n"
@@ -260,7 +207,7 @@ def update_spreadsheet():
             f"Ссылка: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit"
         )
         send_telegram_message(message)
-        
+
     except Exception as e:
         error_msg = f"❌ Ошибка при обновлении таблицы: {str(e)}"
         print(error_msg)
