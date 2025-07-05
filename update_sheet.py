@@ -7,8 +7,6 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import os
 
-# --- Вспомогательные функции ---
-
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -52,7 +50,6 @@ def get_difficulty_and_hashrate():
         hashrate_resp = requests.get("https://blockchain.info/q/hashrate", timeout=10)
 
         diff_str = diff_resp.text.strip()
-        # Преобразуем научную нотацию в обычное число с пробелами для удобства чтения
         difficulty = "{:,.0f}".format(float(diff_str)).replace(",", " ")
 
         hashrate_ghs = float(hashrate_resp.text.strip())
@@ -75,8 +72,6 @@ def safe_float(val, default=0.0):
     except:
         return default
 
-# --- Авторизация и подключение к Google Sheets ---
-
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
@@ -85,8 +80,6 @@ sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
-
-# --- Функция чтения предыдущей таблицы ---
 
 def read_previous_table_values():
     all_values = sheet.get_all_values()
@@ -123,7 +116,6 @@ try:
 
     previous_table = read_previous_table_values()
 
-    # Значения по умолчанию
     miners = 1000
     stock_hashrate = 150000
     attracted_hashrate = 172500
@@ -165,11 +157,9 @@ try:
             usdt_30d_income = safe_float(previous_table[6][3], usdt_30d_income)
             usdt_income_dev = safe_float(previous_table[6][4], usdt_income_dev)
 
-            # Пересчёт доли привлеченного хешрейта в процентах
-            if total_hashrate != 0:
-                tsotah = round(attracted_hashrate / hashrate * 100, 2)
-            else:
-                tsotah = 0.0
+
+            tsotah = round(attracted_hashrate / hashrate * 100, 2)
+
         except Exception as e:
             print(f"❌ Ошибка чтения данных из предыдущей таблицы: {e}")
 
@@ -195,7 +185,19 @@ try:
     for i, row in enumerate(values):
         sheet.insert_row(row, start_row + i)
 
+    send_telegram_message(
+        f"✅ Таблица обновлена: {today}\n"
+        f"Средний курс BTC: {btc_avg}\n"
+        f"Сложность: {difficulty}\n"
+        f"Хешрейт: {total_hashrate} Th/s\n"
+        f"<a href='https://docs.google.com/spreadsheets/d/1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU/edit'>Ссылка на таблицу</a>"
+    )
+
     print("✅ Обновление таблицы завершено.")
 
 except Exception as e:
     print(f"❌ Ошибка: {e}")
+    try:
+        send_telegram_message(f"❌ Ошибка при обновлении таблицы: {e}")
+    except:
+        pass
