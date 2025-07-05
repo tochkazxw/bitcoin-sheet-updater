@@ -110,10 +110,10 @@ try:
         [today, btc_avg, difficulty, hashrate, attracted_share_percent],
 
         ["Кол-во майнеров", "Стоковый хешрейт", "Привлечённый хешрейт", "Распределение", "Хешрейт к распределению"],
-        [miners, stock_hashrate, attracted_hashrate, "2.80%", 4830],
+        [miners, stock_hashrate, attracted_hashrate, 0.028, 4830],
 
         ["Средний хешрейт на майнер", "Прирост хешрейта", "", "Партнер", "Разработчик"],
-        [150, attracted_hashrate - stock_hashrate, "", "1%", "1.8%"],
+        [150, attracted_hashrate - stock_hashrate, "", 0.01, 0.018],
 
         ["Коэфф. прироста", "Суммарный хешрейт", "", 1725, 3105],
         ["15%", total_hashrate, "Доход за 30 дней, BTC", 0.02573522, 0.04632340],
