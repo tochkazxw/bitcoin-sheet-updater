@@ -10,10 +10,6 @@ import warnings
 from decimal import Decimal
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from dotenv import load_dotenv
-
-# Загрузка переменных окружения
-load_dotenv()
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -77,10 +73,9 @@ def get_btc_price():
 
 def get_difficulty_and_hashrate():
     try:
-        # Можно заменить на реальный API
         difficulty = 1.17e14
-        hashrate = 965130501885  # хешрейт в H/s
-        return f"{difficulty:.2E}", f"{hashrate / 1e12:,.0f}"  # Вернём TH/s
+        hashrate = 965130501885  # H/s
+        return f"{difficulty:.2E}", f"{hashrate / 1e12:,.0f}"  # TH/s
     except Exception as e:
         print(f"Ошибка получения сложности и хешрейта: {e}")
         return "1.17E+14", "965,130"
