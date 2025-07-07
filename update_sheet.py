@@ -71,7 +71,7 @@ def get_difficulty_and_hashrate():
         
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
-btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
+btc_avg = int(round(sum(prices) / len(prices))) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
 headers = ["Параметры сети", "Курс", "Сложность ", "Общий хешрейт сети, Th"]
