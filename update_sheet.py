@@ -128,8 +128,8 @@ try:
     developer_share = 0.018
     growth_coeff = 0.15
     total_hashrate = 172500
-    btc_30d_income = 0.02573522
-    btc_income_dev = 0.04632340
+    btc_30d_income = 0
+    btc_income_dev = 0
     useful_hashrate = 167670
     usdt_30d_income = 2702.2
     usdt_income_dev = 4863.96
