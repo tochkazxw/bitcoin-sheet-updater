@@ -68,7 +68,7 @@ def safe_int(val, default=0):
 
 def safe_float(val, default=0.0):
     try:
-        return float(str(val).replace('.', ',').replace('%', '').strip())
+        return float(str(val).replace(',', '.').replace('%', '').strip())
     except:
         return default
 
