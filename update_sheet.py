@@ -74,21 +74,24 @@ def get_difficulty_and_hashrate():
 
 # Основная логика
 
+# Очищаем таблицу
+sheet.clear()
+
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Заголовки и данные (каждый запуск добавляет новые строки)
+# Заголовки и данные (вставляем после очистки)
 headers = ["Параметры сети", "Курс", "Сложность ", "Общий хешрейт сети, Th"]
 data_row = [today, str(btc_avg), difficulty, hashrate]
 sheet.append_row(headers)
 sheet.append_row(data_row)
 
-# Получаем общее количество строк для форматирования
+# Получаем новое количество строк
 row_count = len(sheet.get_all_values())
-start = row_count - 2  # индекс заголовка
-end = row_count        # индекс строки после данных
+start = 0  # заголовок с первой строки
+end = row_count
 
 # Запрос на оформление (цвета и границы)
 requests_body = {
