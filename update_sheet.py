@@ -14,6 +14,9 @@ client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 sheet_id = sheet._properties['sheetId']
 
+# Получаем второй лист по индексу 1 (второй лист)
+second_sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").get_worksheet(1)
+
 # Авторизация Google Sheets API для форматирования
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
@@ -82,6 +85,13 @@ if not existing_values or not any(existing_values[0]):
     sheet.update("A1:D1", [headers])
 
 sheet.update("A2:D2", [data_row])
+
+# --- Добавляем данные в конец второго листа без удаления ---
+second_values = second_sheet.get_all_values()
+if not second_values or not any(second_values[0]):
+    second_sheet.append_row(headers)
+second_sheet.append_row(data_row)
+# --------------------------------------------------------
 
 requests_body = {
     "requests": [
