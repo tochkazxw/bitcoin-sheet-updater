@@ -97,7 +97,7 @@ requests_body = {
                 "cell": {
                     "userEnteredFormat": {
                         "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
-                        "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True}
+                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}, "bold": True}
                     }
                 },
                 "fields": "userEnteredFormat(backgroundColor,textFormat)"
