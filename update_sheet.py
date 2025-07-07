@@ -14,7 +14,7 @@ client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 sheet_id = sheet._properties['sheetId']
 
-# Получаем второй лист по индексу 1 (второй лист)
+
 second_sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").get_worksheet(1)
 
 # Авторизация Google Sheets API для форматирования
@@ -47,14 +47,12 @@ def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y %H:%M")
-
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
         return float(r.json()["bpi"]["USD"]["rate_float"])
     except:
         return None
-
 def get_coingecko_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
@@ -92,11 +90,11 @@ if not second_values or not any(second_values[0]):
     second_sheet.append_row(headers)
 second_sheet.append_row(data_row)
 
-# Получаем номер добавленной строки на втором листе
+
 second_row_count = len(second_sheet.get_all_values())
 second_sheet_id = second_sheet._properties['sheetId']
 
-# Форматируем добавленную строку на втором листе
+
 format_requests = [
     {
         "repeatCell": {
@@ -139,7 +137,7 @@ service.spreadsheets().batchUpdate(
     body={"requests": format_requests}
 ).execute()
 
-# --- Форматирование первого листа (как было) ---
+
 requests_body = {
     "requests": [
         {
