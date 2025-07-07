@@ -91,8 +91,55 @@ second_values = second_sheet.get_all_values()
 if not second_values or not any(second_values[0]):
     second_sheet.append_row(headers)
 second_sheet.append_row(data_row)
-# --------------------------------------------------------
 
+# Получаем номер добавленной строки на втором листе
+second_row_count = len(second_sheet.get_all_values())
+second_sheet_id = second_sheet._properties['sheetId']
+
+# Форматируем добавленную строку на втором листе
+format_requests = [
+    {
+        "repeatCell": {
+            "range": {
+                "sheetId": second_sheet_id,
+                "startRowIndex": second_row_count - 1,
+                "endRowIndex": second_row_count,
+                "startColumnIndex": 0,
+                "endColumnIndex": 4
+            },
+            "cell": {
+                "userEnteredFormat": {
+                    "backgroundColor": {"red": 0.85, "green": 1.0, "blue": 0.85}
+                }
+            },
+            "fields": "userEnteredFormat(backgroundColor)"
+        }
+    },
+    {
+        "updateBorders": {
+            "range": {
+                "sheetId": second_sheet_id,
+                "startRowIndex": second_row_count - 1,
+                "endRowIndex": second_row_count,
+                "startColumnIndex": 0,
+                "endColumnIndex": 4
+            },
+            "top": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "bottom": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "left": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "right": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "innerHorizontal": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
+            "innerVertical": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}}
+        }
+    }
+]
+
+service.spreadsheets().batchUpdate(
+    spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
+    body={"requests": format_requests}
+).execute()
+
+# --- Форматирование первого листа (как было) ---
 requests_body = {
     "requests": [
         {
