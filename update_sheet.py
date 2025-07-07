@@ -41,7 +41,7 @@ def send_telegram_message(text):
     except Exception as e:
         print(f"❌ Исключение при отправке Telegram уведомления: {e}")
 
-# Получить текущую дату в Молдове (дд.мм.гггг)
+# Получить текущую дату
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
@@ -74,8 +74,8 @@ def get_difficulty_and_hashrate():
 
 # Основная логика
 
-# Очищаем таблицу
-sheet.clear()
+sheet.delete_rows(1, 2)
+
 
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
