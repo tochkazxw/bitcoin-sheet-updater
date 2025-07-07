@@ -65,10 +65,10 @@ def get_difficulty_and_hashrate():
         hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
         hashrate_th = int(hashrate / 1000)
         hashrate_str = str(hashrate_th)[:9]
-        return f"{diff:.2E}", hashrate_str
+        return str(int(diff)), hashrate_str
     except:
         return "N/A", "N/A"
-
+        
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
