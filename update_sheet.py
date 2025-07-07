@@ -19,7 +19,6 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
 
-# Функция отправки сообщения в Telegram
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -41,13 +40,11 @@ def send_telegram_message(text):
     except Exception as e:
         print(f"❌ Исключение при отправке Telegram уведомления: {e}")
 
-# Получить текущую дату
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y")
 
-# Получение курса с Coindesk
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
@@ -55,7 +52,6 @@ def get_coindesk_price():
     except:
         return None
 
-# Получение курса с Coingecko
 def get_coingecko_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
@@ -63,45 +59,38 @@ def get_coingecko_price():
     except:
         return None
 
-# Получение сложности и хешрейта с blockchain.info
 def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
         hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
-        return f"{diff:.2E}", str(int(hashrate))
+        hashrate_th = int(hashrate / 1000)
+        hashrate_str = str(hashrate_th)[:9]
+        return f"{diff:.2E}", hashrate_str
     except:
         return "N/A", "N/A"
-
-# Основная логика
-
-sheet.delete_rows(1, 2)
-
 
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = round(sum(prices) / len(prices), 2) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-# Заголовки и данные (вставляем после очистки)
 headers = ["Параметры сети", "Курс", "Сложность ", "Общий хешрейт сети, Th"]
 data_row = [today, str(btc_avg), difficulty, hashrate]
-sheet.append_row(headers)
-sheet.append_row(data_row)
 
-# Получаем новое количество строк
-row_count = len(sheet.get_all_values())
-start = 0  # заголовок с первой строки
-end = row_count
+existing_values = sheet.get_all_values()
+if not existing_values or not any(existing_values[0]):
+    sheet.update("A1:D1", [headers])
 
-# Запрос на оформление (цвета и границы)
+sheet.update("A2:D2", [data_row])
+
 requests_body = {
     "requests": [
         {
             "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": start,
-                    "endRowIndex": start + 1,
+                    "startRowIndex": 0,
+                    "endRowIndex": 1,
                     "startColumnIndex": 0,
                     "endColumnIndex": 4
                 },
@@ -118,8 +107,8 @@ requests_body = {
             "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": start + 1,
-                    "endRowIndex": start + 2,
+                    "startRowIndex": 1,
+                    "endRowIndex": 2,
                     "startColumnIndex": 0,
                     "endColumnIndex": 4
                 },
@@ -136,7 +125,7 @@ requests_body = {
                 "range": {
                     "sheetId": sheet_id,
                     "startRowIndex": 0,
-                    "endRowIndex": row_count,
+                    "endRowIndex": 2,
                     "startColumnIndex": 0,
                     "endColumnIndex": 4
                 },
@@ -151,9 +140,11 @@ requests_body = {
     ]
 }
 
-# Применяем оформление
-service.spreadsheets().batchUpdate(spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU", body=requests_body).execute()
-print(f"✅ Данные за {today} добавлены и оформлены рамками и цветом.")
+service.spreadsheets().batchUpdate(
+    spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
+    body=requests_body
+).execute()
 
-# Отправляем уведомление в Telegram
+print(f"✅ Данные за {today} обновлены и оформлены.")
+
 send_telegram_message(f"✅ Таблица обновлена: {today}, Курс BTC: {btc_avg}, Сложность: {difficulty}, Хешрейт: {hashrate}")
