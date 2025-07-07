@@ -65,7 +65,7 @@ def get_difficulty_and_hashrate():
         hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
         hashrate_th = int(hashrate / 1000)
         hashrate_num = int(str(hashrate_th)[:9])
-        return str(int(diff)), hashrate_str
+        return str(int(diff)), hashrate_num
     except:
         return "N/A", "N/A"
         
