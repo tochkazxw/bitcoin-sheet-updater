@@ -43,7 +43,7 @@ def send_telegram_message(text):
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
-    return now.strftime("%d.%m.%Y")
+    return now.strftime("%d.%m.%Y %H:%M")
 
 def get_coindesk_price():
     try:
