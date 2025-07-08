@@ -7,7 +7,7 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import os
 
-# Авторизация gspread
+
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
@@ -17,7 +17,7 @@ sheet_id = sheet._properties['sheetId']
 
 second_sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").get_worksheet(1)
 
-# Авторизация Google Sheets API для форматирования
+
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
