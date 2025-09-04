@@ -63,7 +63,7 @@ def get_coingecko_price():
 def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
-        hashrate = float(requests.get("https://blockchain.info/q/hashrate", timeout=10).text)
+        hashrate = float(requests.get("https://api.blockchain.info/stats", timeout=10).text)
         hashrate_th = int(hashrate / 1000)
         hashrate_num = int(str(hashrate_th)[:9])
         return str(int(diff)), hashrate_num
