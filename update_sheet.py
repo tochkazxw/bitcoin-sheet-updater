@@ -70,7 +70,6 @@ def get_difficulty_and_hashrate():
         return diff, hashrate_num
     except:
         return None, None
-def get_difficulty_and_hashrate(): 
 
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
