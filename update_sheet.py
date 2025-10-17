@@ -63,9 +63,8 @@ def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
         stats = requests.get("https://api.blockchain.info/stats", timeout=10).json()
-        hashrate = stats.get("hash_rate", 0)  # исправлено, чтобы брать поле из JSON
+        hashrate = stats.get("hash_rate", 0)  
         hashrate_th = int(hashrate / 1000) 
-        # корректно преобразуем в Th/s (терахешей)
         hashrate_num = int(str(hashrate_th)[:9])
         return diff, hashrate_num
     except:
@@ -78,7 +77,7 @@ difficulty, hashrate = get_difficulty_and_hashrate()
 
 headers = ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th"]
 
-# Если difficulty нет (None), то подставляем 0, чтобы избежать ошибок
+
 diff_value = int(difficulty) if difficulty is not None else 0
 hashrate_value = hashrate if hashrate is not None else 0
 
@@ -90,7 +89,7 @@ if not existing_values or not any(existing_values[0]):
 
 sheet.update("A2:D2", [data_row])
 
-# --- Добавляем данные в конец второго листа без удаления ---
+
 second_values = second_sheet.get_all_values()
 if not second_values or not any(second_values[0]):
     second_sheet.append_row(headers)
