@@ -7,16 +7,13 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import os
 
-
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 sheet_id = sheet._properties['sheetId']
 
-
 second_sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").get_worksheet(1)
-
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
@@ -47,12 +44,14 @@ def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y %H:%M")
+
 def get_coindesk_price():
     try:
         r = requests.get("https://api.coindesk.com/v1/bpi/currentprice.json", timeout=10)
         return float(r.json()["bpi"]["USD"]["rate_float"])
     except:
         return None
+
 def get_coingecko_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
@@ -60,16 +59,24 @@ def get_coingecko_price():
     except:
         return None
 
+# ✅ Исправленная функция
 def get_difficulty_and_hashrate():
     try:
-        diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
-        hashrate = float(requests.get("https://api.blockchain.info/stats", timeout=10).text)
-        hashrate_th = int(hashrate / 1000)
-        hashrate_num = int(str(hashrate_th)[:9])
-        return str(int(diff)), hashrate_num
-    except:
+        # Получаем сложность
+        diff_response = requests.get("https://blockchain.info/q/getdifficulty", timeout=10)
+        diff = float(diff_response.text)
+
+        # Получаем хешрейт из JSON-ответа
+        stats_response = requests.get("https://api.blockchain.info/stats", timeout=10)
+        stats = stats_response.json()
+        hashrate = stats["hash_rate"]  # Значение в GH/s
+        hashrate_th = int(hashrate * 1000)  # Переводим в TH/s
+
+        return str(int(diff)), hashrate_th
+    except Exception as e:
+        print(f"Ошибка при получении сложности и хешрейта: {e}")
         return "N/A", "N/A"
-        
+
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = int(round(sum(prices) / len(prices))) if prices else "N/A"
@@ -90,10 +97,8 @@ if not second_values or not any(second_values[0]):
     second_sheet.append_row(headers)
 second_sheet.append_row(data_row)
 
-
 second_row_count = len(second_sheet.get_all_values())
 second_sheet_id = second_sheet._properties['sheetId']
-
 
 format_requests = [
     {
@@ -136,7 +141,6 @@ service.spreadsheets().batchUpdate(
     spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
     body={"requests": format_requests}
 ).execute()
-
 
 requests_body = {
     "requests": [
@@ -188,18 +192,4 @@ requests_body = {
                 "bottom": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
                 "left": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
                 "right": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "innerHorizontal": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}},
-                "innerVertical": {"style": "SOLID", "width": 1, "color": {"red": 0, "green": 0, "blue": 0}}
-            }
-        }
-    ]
-}
-
-service.spreadsheets().batchUpdate(
-    spreadsheetId="1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU",
-    body=requests_body
-).execute()
-
-print(f"✅ Данные за {today} обновлены и оформлены.")
-
-send_telegram_message(f"✅ Таблица обновлена: {today}, Курс BTC: {btc_avg}, Сложность: {difficulty}, Хешрейт: {hashrate}")
+                "innerHorizontal": {"style": "SOLID", "width": 1,
