@@ -10,14 +10,15 @@ import os
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
+
 sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").sheet1
 sheet_id = sheet._properties['sheetId']
-
 second_sheet = client.open_by_key("1SjT740pFA7zuZMgBYf5aT0IQCC-cv6pMsQpEXYgQSmU").get_worksheet(1)
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 service = build("sheets", "v4", credentials=credentials)
+
 
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -25,12 +26,14 @@ def send_telegram_message(text):
     if not token or not chat_id:
         print("⚠️ Не заданы TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID в переменных окружения.")
         return
+
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": text,
         "parse_mode": "HTML"
     }
+
     try:
         resp = requests.post(url, data=payload, timeout=10)
         if resp.status_code == 200:
@@ -40,10 +43,12 @@ def send_telegram_message(text):
     except Exception as e:
         print(f"❌ Исключение при отправке Telegram уведомления: {e}")
 
+
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
     now = datetime.datetime.now(tz)
     return now.strftime("%d.%m.%Y %H:%M")
+
 
 def get_coindesk_price():
     try:
@@ -52,6 +57,7 @@ def get_coindesk_price():
     except:
         return None
 
+
 def get_coingecko_price():
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=10)
@@ -59,15 +65,23 @@ def get_coingecko_price():
     except:
         return None
 
+
+# ✅ Исправленная функция — возвращает реальные данные в гигахэшах
 def get_difficulty_and_hashrate():
     try:
-        diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
-        stats = requests.get("https://api.blockchain.info/stats", timeout=10).json()
-        hashrate = int(stats.get("hash_rate", 0))  # приводим к int чтобы не было float с экспонентой
-        hashrate_th = hashrate // int(1e12)       # целочисленное деление, без дробных
-        return diff, hashrate_th
-    except:
-        return None, None
+        # Получаем сложность сети (Blockchain.info)
+        diff_resp = requests.get("https://blockchain.info/q/getdifficulty", timeout=10)
+        diff = float(diff_resp.text)
+
+        # Получаем хешрейт (btc.com API, GH/s)
+        stats_resp = requests.get("https://chain.api.btc.com/v3/statistics/hashrate", timeout=10)
+        stats = stats_resp.json()
+        hashrate_gh = float(stats["data"]["hashrate_ghs"])
+
+        return str(int(diff)), int(hashrate_gh)
+    except Exception as e:
+        print(f"⚠️ Ошибка при получении данных сети: {e}")
+        return "N/A", "N/A"
 
 
 today = get_today_moldova()
@@ -75,19 +89,13 @@ prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not N
 btc_avg = int(round(sum(prices) / len(prices))) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-headers = ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th"]
-
-# Если difficulty нет (None), то подставляем 0, чтобы избежать ошибок
-diff_value = int(difficulty) if difficulty is not None else 0
-hashrate_value = hashrate if hashrate is not None else 0
-
-data_row = [today, btc_avg, diff_value, hashrate_value]
+headers = ["Параметры сети", "Курс", "Сложность ", "Общий хешрейт сети, GH/s"]
+data_row = [today, str(btc_avg), difficulty, hashrate]
 
 existing_values = sheet.get_all_values()
 if not existing_values or not any(existing_values[0]):
     sheet.update("A1:D1", [headers])
-
-sheet.update("A2:D2", [data_row])
+    sheet.update("A2:D2", [data_row])
 
 # --- Добавляем данные в конец второго листа без удаления ---
 second_values = second_sheet.get_all_values()
@@ -203,5 +211,4 @@ service.spreadsheets().batchUpdate(
 ).execute()
 
 print(f"✅ Данные за {today} обновлены и оформлены.")
-
-send_telegram_message(f"✅ Таблица обновлена: {today}, Курс BTC: {btc_avg}, Сложность: {diff_value}, Хешрейт: {hashrate_value}")
+send_telegram_message(f"✅ Таблица обновлена: {today}, Курс BTC: {btc_avg}, Сложность: {difficulty}, Хешрейт: {hashrate} GH/s")
