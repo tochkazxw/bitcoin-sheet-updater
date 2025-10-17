@@ -59,31 +59,28 @@ def get_coingecko_price():
     except:
         return None
 
-# ✅ Исправленная функция
 def get_difficulty_and_hashrate():
     try:
-        # Получаем сложность
-        diff_response = requests.get("https://blockchain.info/q/getdifficulty", timeout=10)
-        diff = float(diff_response.text)
-
-        # Получаем хешрейт из JSON-ответа
-        stats_response = requests.get("https://api.blockchain.info/stats", timeout=10)
-        stats = stats_response.json()
-        hashrate = stats["hash_rate"]  # Значение в GH/s
-        hashrate_th = int(hashrate * 1000)  # Переводим в TH/s
-
-        return str(int(diff)), hashrate_th
-    except Exception as e:
-        print(f"Ошибка при получении сложности и хешрейта: {e}")
-        return "N/A", "N/A"
+        diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
+        stats = requests.get("https://api.blockchain.info/stats", timeout=10).json()
+        hashrate = stats.get("hash_rate", 0)  # исправлено, чтобы брать поле из JSON
+        hashrate_th = int(hashrate / 1e12)  # корректно преобразуем в Th/s (терахешей)
+        return diff, hashrate_th
+    except:
+        return None, None
 
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
 btc_avg = int(round(sum(prices) / len(prices))) if prices else "N/A"
 difficulty, hashrate = get_difficulty_and_hashrate()
 
-headers = ["Параметры сети", "Курс", "Сложность ", "Общий хешрейт сети, Th"]
-data_row = [today, str(btc_avg), difficulty, hashrate]
+headers = ["Параметры сети", "Курс", "Сложность", "Общий хешрейт сети, Th"]
+
+# Если difficulty нет (None), то подставляем 0, чтобы избежать ошибок
+diff_value = int(difficulty) if difficulty is not None else 0
+hashrate_value = hashrate if hashrate is not None else 0
+
+data_row = [today, btc_avg, diff_value, hashrate_value]
 
 existing_values = sheet.get_all_values()
 if not existing_values or not any(existing_values[0]):
@@ -206,4 +203,4 @@ service.spreadsheets().batchUpdate(
 
 print(f"✅ Данные за {today} обновлены и оформлены.")
 
-send_telegram_message(f"✅ Таблица обновлена: {today}, Курс BTC: {btc_avg}, Сложность: {difficulty}, Хешрейт: {hashrate}")
+send_telegram_message(f"✅ Таблица обновлена: {today}, Курс BTC: {btc_avg}, Сложность: {diff_value}, Хешрейт: {hashrate_value}")
