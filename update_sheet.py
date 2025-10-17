@@ -63,10 +63,9 @@ def get_difficulty_and_hashrate():
     try:
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
         stats = requests.get("https://api.blockchain.info/stats", timeout=10).json()
-        hashrate = stats.get("hash_rate", 0)  # В хешах в секунду (H/s)
-        # Переводим в терахеши в секунду (TH/s): 1 TH/s = 1e12 H/s
-        hashrate_th = hashrate / 1e12  
-        return diff, int(round(hashrate_th))
+        hashrate = int(stats.get("hash_rate", 0))  # приводим к int чтобы не было float с экспонентой
+        hashrate_th = hashrate // int(1e12)       # целочисленное деление, без дробных
+        return diff, hashrate_th
     except:
         return None, None
 
