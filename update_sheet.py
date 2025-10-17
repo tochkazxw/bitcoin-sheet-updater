@@ -22,9 +22,6 @@ service = build("sheets", "v4", credentials=credentials)
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
-        print("⚠️ Не заданы TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID в переменных окружения.")
-        return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
         "chat_id": chat_id,
@@ -34,11 +31,11 @@ def send_telegram_message(text):
     try:
         resp = requests.post(url, data=payload, timeout=10)
         if resp.status_code == 200:
-            print("✅ Уведомление в Telegram отправлено.")
+            print(" Уведомление в Telegram отправлено.")
         else:
-            print(f"❌ Ошибка отправки уведомления в Telegram: {resp.text}")
+            print(f" Ошибка отправки уведомления в Telegram: {resp.text}")
     except Exception as e:
-        print(f"❌ Исключение при отправке Telegram уведомления: {e}")
+        print(f" Исключение при отправке Telegram уведомления: {e}")
 
 def get_today_moldova():
     tz = pytz.timezone('Europe/Chisinau')
@@ -202,6 +199,6 @@ service.spreadsheets().batchUpdate(
     body=requests_body
 ).execute()
 
-print(f"✅ Данные за {today} обновлены и оформлены.")
+print(f"Данные за {today} обновлены и оформлены.")
 
-send_telegram_message(f"✅ Таблица обновлена: {today}, Курс BTC: {btc_avg}, Сложность: {diff_value}, Хешрейт: {hashrate_value}")
+send_telegram_message(f"Таблица обновлена: {today}, Курс BTC: {btc_avg}, Сложность: {diff_value}, Хешрейт: {hashrate_value}")
