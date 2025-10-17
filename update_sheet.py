@@ -64,10 +64,13 @@ def get_difficulty_and_hashrate():
         diff = float(requests.get("https://blockchain.info/q/getdifficulty", timeout=10).text)
         stats = requests.get("https://api.blockchain.info/stats", timeout=10).json()
         hashrate = stats.get("hash_rate", 0)  # исправлено, чтобы брать поле из JSON
-        hashrate_th = int(hashrate / 1e12)  # корректно преобразуем в Th/s (терахешей)
-        return diff, hashrate_th
+        hashrate_th = int(hashrate / 1000) 
+        # корректно преобразуем в Th/s (терахешей)
+        hashrate_num = int(str(hashrate_th)[:9])
+        return diff, hashrate_num
     except:
         return None, None
+def get_difficulty_and_hashrate(): 
 
 today = get_today_moldova()
 prices = [p for p in [get_coindesk_price(), get_coingecko_price()] if p is not None]
